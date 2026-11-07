@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Photo League</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=mw6egii7">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏇</text></svg>">
   <style>
     .hero { text-align: center; padding-top: 30px; }
@@ -32,8 +32,8 @@
     <p><a class="btn purple small" href="results.html">🏇 Results & race</a></p>
   </div>
   <script type="module">
-    import { $, apiGet, apiPost, toast } from './common.js';
-    import { horseSVG } from './horse.js';
+    import { $, apiGet, apiPost, toast } from './common.js?v=mw6egii7';
+    import { horseSVG } from './horse.js?v=mw6egii7';
     $('#horse').innerHTML = horseSVG({ color: '#ff6a00', mane: '#ff3ea5', cap: '#00c2c7', num: '1' });
     $('#phone').value = localStorage.getItem('phone') || '';
     apiGet('results').then((r) => { $('#title').textContent = r.league.title; document.title = r.league.title; }).catch(() => {});

@@ -279,3 +279,10 @@ img[data-photo].loaded { opacity: 1; }
   .rank { width: 40px; height: 40px; font-size: 22px; top: -12px; left: -12px; }
   .zoom { width: 30px; height: 30px; top: 10px; right: 10px; font-size: 14px; }
 }
+
+/* A photo that couldn't be loaded: stop shimmering and say so. */
+.pic.missing { animation: none; background: repeating-linear-gradient(45deg, #fff1c9 0 14px, #ffe3f1 14px 28px); }
+.pic.missing::after {
+  content: "🐴 couldn't load"; position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: var(--display); font-size: 15px; color: var(--ink); text-align: center; padding: 8px;
+}

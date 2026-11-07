@@ -1,4 +1,4 @@
-import { API_URL } from './config.js';
+import { API_URL } from './config.js?v=mw6egii7';
 
 // Shared helpers for every page.
 export const $ = (sel, el = document) => el.querySelector(sel);
@@ -138,17 +138,28 @@ export function picHTML(id, alt = '', size = 'thumb') {
   return `<div class="pic"><img data-photo="${esc(id)}" data-size="${size}" ${u ? `src="${esc(u)}"` : ''} alt="${esc(alt)}" decoding="async"></div>`;
 }
 
+// A photo we truly can't show gets a "couldn't load" face instead of shimmering forever.
+export function markMissing(id) {
+  for (const img of document.querySelectorAll(`img[data-photo="${CSS.escape(id)}"]`)) {
+    img.closest('.pic')?.classList.add('missing');
+  }
+}
+
 // Fade each photo in as it lands; if a link has expired, fetch a fresh one once.
 document.addEventListener('load', (e) => {
   const t = e.target;
-  if (t.tagName === 'IMG' && t.dataset.photo) t.classList.add('loaded');
+  if (t.tagName === 'IMG' && t.dataset.photo) { t.classList.add('loaded'); t.closest('.pic')?.classList.remove('missing'); }
 }, true);
 const retried = new Set();
 document.addEventListener('error', async (e) => {
   const t = e.target;
-  if (t.tagName !== 'IMG' || !t.dataset.photo || !t.getAttribute('src') || retried.has(t.dataset.photo)) return;
-  retried.add(t.dataset.photo);
-  try { applyUrls((await apiGet('photoUrls', { ids: t.dataset.photo, fresh: '1' })).urls); } catch { /* give up quietly */ }
+  if (t.tagName !== 'IMG' || !t.dataset.photo || !t.getAttribute('src')) return;
+  const id = t.dataset.photo;
+  if (retried.has(id)) { markMissing(id); return; }
+  retried.add(id);
+  const before = photoUrl(id, t.dataset.size || 'thumb');
+  try { applyUrls((await apiGet('photoUrls', { ids: id, fresh: '1' })).urls); } catch { /* fall through */ }
+  if (photoUrl(id, t.dataset.size || 'thumb') === before) markMissing(id); // no fresh link to try
 }, true);
 
 // Apple's public link doesn't serve GIFs, so those live in gifs/ (named by
@@ -180,4 +191,5 @@ export async function loadPhotoUrls(album, { batch = 12, onProgress } = {}) {
     done += c.length;
     onProgress?.(done, album.photos.length);
   }));
+  for (const p of album.photos) if (!photoUrl(p.id)) markMissing(p.id);
 }

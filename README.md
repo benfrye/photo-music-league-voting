@@ -65,6 +65,16 @@ Opens a local copy at http://localhost:8080 that runs the real `Code.gs` against
 
 Add `?live` to the address (http://localhost:8080/?live) to use the real sheet and deployed script instead, for example to check real-world speed.
 
+## Publishing changes
+
+Before committing a change to anything in `docs/`, run:
+
+```bash
+npm run stamp
+```
+
+It tags every script and stylesheet reference with a new version. GitHub Pages lets browsers reuse files for 10 minutes, and without the stamp a visitor right after a publish can end up with a mix of old and new code.
+
 ## How ranked choice works here
 
 We run instant-runoff once per round:
