@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cast your ballot · Photo League</title>
-  <link rel="stylesheet" href="styles.css?v=mw6gaw3m">
+  <link rel="stylesheet" href="styles.css?v=mw6gc5yw">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Fredoka:wght@400;600;700&display=swap">
-  <link rel="modulepreload" href="vote.js?v=mw6gaw3m">
-  <link rel="modulepreload" href="common.js?v=mw6gaw3m">
-  <link rel="modulepreload" href="config.js?v=mw6gaw3m">
+  <link rel="modulepreload" href="vote.js?v=mw6gc5yw">
+  <link rel="modulepreload" href="common.js?v=mw6gc5yw">
+  <link rel="modulepreload" href="config.js?v=mw6gc5yw">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏇</text></svg>">
   <style>
     .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 26px 0 30px; }
@@ -106,6 +106,8 @@
 
     .done-box { text-align: center; padding: 40px 20px; }
     .done-box .save-row { margin-top: 44px; }
+    .switch-row { margin-top: 28px; }
+    .switch-row .btn { transform: rotate(-1deg); }
     .done-box .stamp {
       display: inline-block; font-family: var(--display); font-size: clamp(40px, 9vw, 90px); color: var(--pink);
       border: 8px solid var(--pink); border-radius: 18px; padding: 16px 26px 6px; transform: rotate(-8deg);
@@ -123,7 +125,7 @@
       <div class="sub" id="greeting">Loading the stable...</div>
     </header>
     <main id="main"></main>
-    <p class="center"><a href="index.html" id="switch" style="font-weight:700">Not you? Switch rider</a></p>
+    <p class="center switch-row"><a class="btn white small" href="index.html" id="switch">🔄 Not you? Switch rider</a></p>
   </div>
 
   <div class="tray" id="tray" hidden>
@@ -138,6 +140,6 @@
     <div class="slots" id="slots"></div>
   </div>
 
-  <script type="module" src="vote.js?v=mw6gaw3m"></script>
+  <script type="module" src="vote.js?v=mw6gc5yw"></script>
 </body>
 </html>
