@@ -4,13 +4,14 @@ Ranked-choice voting on photos for a Photo Music League, with a horse race for t
 
 - **Website:** static files in `docs/`, hosted free on GitHub Pages.
 - **Database + control panel:** a Google Sheet ([photo-league-votes](https://docs.google.com/spreadsheets/d/1TAeiqiLOfgefVv0jJlAKXDYAzPUfqXGIbqPJfkRZdgE/edit)) with a small Apps Script attached that the site talks to.
+- **Photos:** pulled live from a public iCloud shared album, through the same Apps Script.
 - **Login:** voters type their phone number; it has to match a row on the sheet's Voters tab.
 
 ## The sheet
 
 | Tab | What goes there |
 | --- | --- |
-| **Settings** | League name, Rounds (how many photos to pick), Voting (`Not yet` / `Open` / `Closed`) |
+| **Settings** | League name, Rounds (how many photos to pick), Voting (`Not yet` / `Open` / `Closed`), Album link |
 | **Voters** | Name and Phone for everyone invited. "Voted" fills in by itself. |
 | **Ballots** | Written by the site. One row per voter: their ranked photo IDs. |
 
@@ -33,21 +34,19 @@ If you edit `Code.gs` later: **Deploy → Manage deployments → ✏️ → Vers
 
 The sheet itself can stay private (Share → General access: Restricted). The site never reads the sheet directly; it goes through the script, which runs as you. That keeps everyone's phone numbers out of public view.
 
-### 2. Add the photos
-Put the photos in `images/`, then:
+### 2. Connect the photo album
+1. In Photos, open the shared album → People icon → turn on **Public Website** → copy the link (`https://www.icloud.com/sharedalbum/#...`).
+2. Paste it into **Album link** on the sheet's Settings tab.
+3. In the sheet, run **🏇 Photo League → Keep album photos fresh (run once)** and approve the permissions.
 
-```bash
-npm run photos
-```
-
-This makes web-sized copies in `docs/photos/` (HEIC from iPhones is converted to JPEG) and writes `docs/photos.json`. To keep a photo off the ballot, set `"hidden": true` for it in `docs/photos.json`. You can also add a `"contributor"` name to show who took it. Re-running keeps your edits. (The original `images/` folder is git-ignored; only the web copies get published.)
+Apple takes ~9 seconds to list an album, so the script keeps a cached copy (in Apps Script's built-in cache, not the sheet) and a timer refreshes it every 5 minutes. Visitors get the photo list and image links in one quick request, and boxes appear before the images finish loading. New photos added to the album show up within about 30 minutes; **Refresh album photos now** in the menu pulls them right away.
 
 ### 3. Publish on GitHub Pages
 1. Create a GitHub repo and push this project.
 2. Repo **Settings → Pages** → Source: **Deploy from a branch** → Branch `main`, folder **`/docs`** → Save.
 3. In a minute it's live at `https://<you>.github.io/<repo>/`. Send that link to the group.
 
-Heads-up: anything in `docs/` is public, including the photos.
+Heads-up: anything in `docs/` is public. The photos aren't stored there; browsers load them straight from Apple.
 
 ### 4. Run a vote
 1. Fill in Settings (league name, rounds) and Voters (name + phone).
@@ -60,7 +59,9 @@ Heads-up: anything in `docs/` is public, including the photos.
 npm run dev
 ```
 
-Opens a local copy at http://localhost:8080 that runs the real `Code.gs` against a pretend sheet with four voters (phones `5550100001` through `5550100004`). Nothing touches your real Google Sheet. Peek at the pretend sheet at http://localhost:8080/dev-sheet.
+Opens a local copy at http://localhost:8080 that runs the real `Code.gs` against a pretend sheet with four voters (phones `5550100001` through `5550100004`), using photos from the real iCloud album. Nothing touches your real Google Sheet. Peek at the pretend sheet at http://localhost:8080/dev-sheet.
+
+Add `?live` to the address (http://localhost:8080/?live) to use the real sheet and deployed script instead, for example to check real-world speed.
 
 ## How ranked choice works here
 

@@ -181,13 +181,14 @@ textarea { min-height: 120px; resize: vertical; }
 .ph:nth-child(4n+3) { transform: rotate(-.5deg); }
 .ph:nth-child(4n+4) { transform: rotate(1.8deg); }
 .ph:hover { transform: rotate(0) scale(1.04); box-shadow: 9px 9px 0 var(--ink); z-index: 2; }
-.ph img {
-  width: 100%; aspect-ratio: 1; object-fit: cover; display: block;
-  border: 3px solid var(--ink); border-radius: 8px; background: #eee;
+.ph .pic {
+  position: relative; width: 100%; aspect-ratio: 1; overflow: hidden;
+  border: 3px solid var(--ink); border-radius: 8px;
 }
+.ph .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ph .cap { font-size: 13px; font-weight: 600; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1em; }
 .ph.picked { background: var(--yellow); }
-.ph.picked img { filter: saturate(1.2); }
+.ph.picked .pic img { filter: saturate(1.2); }
 .ph.dim { opacity: .38; filter: grayscale(1); }
 .rank {
   position: absolute; top: -16px; left: -16px;
@@ -258,3 +259,23 @@ textarea { min-height: 120px; resize: vertical; }
 .topnav { display: flex; justify-content: flex-start; margin-bottom: -6px; position: sticky; top: 12px; z-index: 2500; pointer-events: none; }
 .topnav .btn { pointer-events: auto; }
 .topnav .btn { transform: rotate(-2deg); }
+
+/* ---------- photo placeholders: a candy-stripe shimmer until the image lands ---------- */
+.pic {
+  background:
+    linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .7) 50%, transparent 70%) 0 0 / 250% 100%,
+    repeating-linear-gradient(45deg, #ffe9a8 0 14px, #ffd6ec 14px 28px);
+  animation: shimmer 1.3s linear infinite;
+}
+.pic:has(img.loaded) { animation: none; background: #eee; }
+@keyframes shimmer { from { background-position: 150% 0, 0 0; } to { background-position: -100% 0, 0 0; } }
+img[data-photo] { opacity: 0; transition: opacity .35s ease-out; }
+img[data-photo].loaded { opacity: 1; }
+
+/* Two photos per row on phones instead of one giant one. */
+@media (max-width: 480px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .ph { padding: 6px 6px 8px; border-width: 3px; box-shadow: 4px 4px 0 var(--ink); }
+  .rank { width: 40px; height: 40px; font-size: 22px; top: -12px; left: -12px; }
+  .zoom { width: 30px; height: 30px; top: 10px; right: 10px; font-size: 14px; }
+}

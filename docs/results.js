@@ -1,4 +1,4 @@
-import { $, $$, apiGet, loadPhotos, esc, confetti, lightbox, COLORS } from './common.js';
+import { $, $$, apiGet, loadAlbum, loadPhotoUrls, photoUrl, esc, confetti, lightbox, COLORS } from './common.js';
 import { sequentialIRV } from './rcv.js';
 import { horseSVG } from './horse.js';
 
@@ -23,9 +23,15 @@ let photoById = new Map();
 let pollTimer = null;
 
 async function load() {
-  const [r, photos] = await Promise.all([apiGet('results'), loadPhotos()]);
+  const r = await apiGet('results');
   data = { title: r.league.title, seats: r.league.rounds, status: r.league.status, voters: r.voters };
   if (r.league.status === 'closed' && r.ballots) {
+    // The jockeys need their photos before the gun goes off.
+    $('#title').textContent = data.title;
+    $('#subtitle').textContent = 'Saddling up the jockeys...';
+    const album = await loadAlbum();
+    await loadPhotoUrls(album, { onProgress: (n, total) => { $('#subtitle').textContent = `Saddling up the jockeys... ${n}/${total}`; } });
+    const photos = album.photos.map((p) => ({ ...p, thumb: photoUrl(p.id), src: photoUrl(p.id, 'src') || photoUrl(p.id) }));
     // Ranked-choice count happens right here in the browser.
     data.photos = photos;
     data.result = sequentialIRV(r.ballots, photos.map((p) => p.id), r.league.rounds, r.league.seed);

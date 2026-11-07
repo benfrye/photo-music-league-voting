@@ -2,7 +2,7 @@
  * Photo League: the Google Sheet is the database and the control panel.
  *
  * Tabs (created by the "🏇 Photo League > Set up the sheet" menu):
- *   Settings : League name, Rounds, Voting (Not yet / Open / Closed)
+ *   Settings : League name, Rounds, Voting (Not yet / Open / Closed), Album link
  *   Voters   : Name, Phone, Voted   <- you fill in Name + Phone
  *   Ballots  : written by the site, one row per voter
  *
@@ -14,6 +14,7 @@ var SETTINGS = [
   ['Rounds', 5, 'How many Music League rounds need a photo'],
   ['Voting', 'Not yet', 'Not yet / Open / Closed. Closes on its own once everyone on Voters has voted.'],
   ['Tiebreak seed', '', 'Filled in automatically. Leave it alone.'],
+  ['Album link', '', 'Public iCloud shared album link (Public Website must be on). This is where the ballot photos come from.'],
 ];
 var HEADERS = {
   Voters: ['Name', 'Phone', 'Voted'],
@@ -27,6 +28,9 @@ function onOpen() {
     .addItem('Set up the sheet', 'setupSheet')
     .addItem('Close voting now', 'closeVoting')
     .addItem('Start over (clear all ballots)', 'startOver')
+    .addSeparator()
+    .addItem('Refresh album photos now', 'refreshAlbum')
+    .addItem('Keep album photos fresh (run once)', 'installAlbumRefresh')
     .addToUi();
 }
 
@@ -38,6 +42,8 @@ function setupSheet() {
     s.getRange(2, 1, SETTINGS.length, 3).setValues(SETTINGS);
     s.setFrozenRows(1);
   }
+  var have = rows_('Settings').map(function (r) { return String(r.Setting).trim(); });
+  SETTINGS.forEach(function (row) { if (have.indexOf(row[0]) < 0) s.appendRow(row); });
   if (!getSetting_('Tiebreak seed')) setSetting_('Tiebreak seed', Utilities.getUuid().slice(0, 8));
   Object.keys(HEADERS).forEach(function (name) {
     var sh = ss.getSheetByName(name) || ss.insertSheet(name);
@@ -67,6 +73,8 @@ function doGet(e) {
   try {
     var action = (e && e.parameter && e.parameter.action) || 'results';
     if (action === 'results') return json_(results_());
+    if (action === 'album') return json_(album_());
+    if (action === 'photoUrls') return json_(photoUrls_(String(e.parameter.ids || ''), e.parameter.fresh === '1'));
     return json_({ error: 'Unknown action.' });
   } catch (err) {
     return json_({ error: String(err.message || err) });
@@ -231,4 +239,169 @@ function ballotFor_(phone) {
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ---------------------------------------------------------------- live iCloud album
+//
+// Apple's album listing takes ~9 seconds, so we cache it, and a timer
+// (installAlbumRefresh) keeps the cache warm. Image links expire after
+// ~20 minutes, so they're cached for 10 and refreshed every 5.
+
+var LIST_TTL = 6 * 60 * 60;       // seconds; max CacheService allows
+var LIST_STALE_MS = 30 * 60 * 1000; // timer re-reads the album list this often
+var URL_TTL = 10 * 60;            // seconds
+var B62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+function albumToken_() {
+  var link = String(getSetting_('Album link') || '').trim();
+  if (!link) return '';
+  var after = link.indexOf('#') >= 0 ? link.split('#')[1] : link;
+  var m = after.match(/^[A-Za-z0-9_-]+/);
+  return m ? m[0] : '';
+}
+
+function albumHost_(token) {
+  var chars = token.charAt(0) === 'A' ? token.substr(1, 1) : token.substr(1, 2);
+  var n = 0;
+  for (var i = 0; i < chars.length; i++) n = n * 62 + B62.indexOf(chars.charAt(i));
+  return 'p' + (n < 10 ? '0' : '') + n + '-sharedstreams.icloud.com';
+}
+
+function icloudPost_(host, token, endpoint, body) {
+  var res = UrlFetchApp.fetch('https://' + host + '/' + token + '/sharedstreams/' + endpoint, {
+    method: 'post', contentType: 'text/plain', payload: JSON.stringify(body),
+    muteHttpExceptions: true, followRedirects: false,
+  });
+  var json = null;
+  try { json = JSON.parse(res.getContentText()); } catch (e) { /* not json */ }
+  return { code: res.getResponseCode(), json: json };
+}
+
+function pickDerivatives_(p) {
+  var ders = Object.keys(p.derivatives || {}).map(function (k) {
+    var d = p.derivatives[k];
+    return { checksum: d.checksum, size: Math.max(Number(d.width) || 0, Number(d.height) || 0) };
+  }).filter(function (d) { return d.checksum; }).sort(function (a, b) { return a.size - b.size; });
+  if (!ders.length) return null;
+  var thumb = ders.filter(function (d) { return d.size >= 300; })[0] || ders[ders.length - 1];
+  var fit = ders.filter(function (d) { return d.size <= 2100; });
+  var full = fit.length ? fit[fit.length - 1] : ders[ders.length - 1];
+  return { t: thumb.checksum, f: full.checksum };
+}
+
+function fetchAlbumList_(token) {
+  var host = albumHost_(token);
+  var r = icloudPost_(host, token, 'webstream', { streamCtag: null });
+  if (r.code === 330 && r.json && r.json['X-Apple-MMe-Host']) {
+    host = r.json['X-Apple-MMe-Host'];
+    r = icloudPost_(host, token, 'webstream', { streamCtag: null });
+  }
+  if (r.code !== 200 || !r.json) throw new Error("Couldn't read the iCloud album (" + r.code + '). Is Public Website still turned on?');
+  var photos = [];
+  (r.json.photos || []).forEach(function (p) {
+    if (p.mediaAssetType === 'video') return;
+    var d = pickDerivatives_(p);
+    if (!d) return;
+    photos.push({
+      id: p.photoGuid, w: Number(p.width) || 0, h: Number(p.height) || 0,
+      caption: p.caption || '', contributor: p.contributorFullName || '', t: d.t, f: d.f,
+    });
+  });
+  return { at: Date.now(), token: token, host: host, name: r.json.streamName || '', photos: photos };
+}
+
+// The album list, from cache when possible. maxAgeMs forces a re-read when older.
+function getAlbum_(maxAgeMs) {
+  var token = albumToken_();
+  if (!token) return null;
+  var cache = CacheService.getScriptCache();
+  var key = 'album:' + token;
+  var hit = cache.get(key);
+  if (hit) {
+    var a = JSON.parse(hit);
+    if (!maxAgeMs || Date.now() - a.at < maxAgeMs) return a;
+  }
+  var fresh = fetchAlbumList_(token);
+  cache.put(key, JSON.stringify(fresh), LIST_TTL);
+  return fresh;
+}
+
+// GET ?action=album  ->  the photo list, plus any image links already in the
+// cache (the 5-minute timer keeps them there), so one request usually does it.
+function album_() {
+  var a = getAlbum_();
+  if (!a) throw new Error("No photo album is set up yet. Add the iCloud link to \"Album link\" in the sheet's Settings tab.");
+  var cached = CacheService.getScriptCache().getAll(a.photos.map(function (p) { return 'u:' + p.id; }));
+  var urls = {};
+  a.photos.forEach(function (p) { var c = cached['u:' + p.id]; if (c) urls[p.id] = JSON.parse(c); });
+  return {
+    source: 'icloud', name: a.name, count: a.photos.length,
+    photos: a.photos.map(function (p) { return { id: p.id, w: p.w, h: p.h, caption: p.caption, contributor: p.contributor }; }),
+    urls: urls,
+  };
+}
+
+// Fetch fresh links for these photos from Apple and cache them.
+function fetchUrls_(a, list) {
+  var cache = CacheService.getScriptCache();
+  var out = {};
+  for (var i = 0; i < list.length; i += 25) {
+    var batch = list.slice(i, i + 25);
+    var r = icloudPost_(a.host, a.token, 'webasseturls', { photoGuids: batch.map(function (p) { return p.id; }) });
+    if (r.code !== 200 || !r.json) throw new Error('iCloud image links failed (' + r.code + ').');
+    var items = r.json.items || {};
+    var put = {};
+    batch.forEach(function (p) {
+      var t = items[p.t], f = items[p.f];
+      if (!t && !f) return;
+      var u = {
+        thumb: t ? 'https://' + t.url_location + t.url_path : null,
+        src: f ? 'https://' + f.url_location + f.url_path : null,
+      };
+      u.thumb = u.thumb || u.src;
+      u.src = u.src || u.thumb;
+      out[p.id] = u;
+      put['u:' + p.id] = JSON.stringify(u);
+    });
+    cache.putAll(put, URL_TTL);
+  }
+  return out;
+}
+
+// GET ?action=photoUrls&ids=a,b,c  ->  { urls: { id: { thumb, src } } }
+function photoUrls_(idList, fresh) {
+  var a = getAlbum_();
+  if (!a) return { urls: {} };
+  var ids = idList.split(',').map(function (x) { return x.trim(); }).filter(String).slice(0, 60);
+  var byId = {};
+  a.photos.forEach(function (p) { byId[p.id] = p; });
+  var urls = {};
+  var missing = [];
+  var cached = fresh ? {} : CacheService.getScriptCache().getAll(ids.map(function (id) { return 'u:' + id; }));
+  ids.forEach(function (id) {
+    var c = cached['u:' + id];
+    if (c) urls[id] = JSON.parse(c);
+    else if (byId[id]) missing.push(byId[id]);
+  });
+  if (missing.length) {
+    var got = fetchUrls_(a, missing);
+    Object.keys(got).forEach(function (id) { urls[id] = got[id]; });
+  }
+  return { urls: urls };
+}
+
+// Timer job: keep the list and every image link warm so visitors never wait on Apple.
+function refreshAlbum() {
+  var a = getAlbum_(LIST_STALE_MS);
+  if (a) fetchUrls_(a, a.photos);
+}
+
+function installAlbumRefresh() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'refreshAlbum') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('refreshAlbum').timeBased().everyMinutes(5).create();
+  refreshAlbum();
+  var ss = SpreadsheetApp.getActive();
+  if (typeof ss.toast === 'function') ss.toast('Album photos will stay fresh (refreshes every 5 minutes).');
 }

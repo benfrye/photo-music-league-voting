@@ -19,41 +19,68 @@
     .how div:nth-child(2) { transform: rotate(1deg); }
     @media (max-width: 760px) { .how { grid-template-columns: 1fr; } }
 
+    /* ---------- ballot: a bottom sheet you can drag up, down, or tap ---------- */
+    .wrap { padding-bottom: calc(var(--sheet-h, 160px) + 40px); }
     .tray {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-      background: var(--purple);
-      border-top: 5px solid var(--ink);
-      padding: 10px 14px 12px;
-      color: #fff;
-      box-shadow: 0 -6px 0 rgba(0,0,0,.15);
+      display: flex; flex-direction: column;
+      height: var(--sheet-h, 220px); max-height: 92vh;
+      background: var(--purple); color: #fff;
+      border: 5px solid var(--ink); border-bottom: 0; border-radius: 24px 24px 0 0;
+      box-shadow: 0 -6px 0 rgba(0, 0, 0, .15);
+      transition: height .34s cubic-bezier(.2, .9, .3, 1.08);
+      padding-bottom: env(safe-area-inset-bottom);
     }
-    .tray-inner { max-width: 1100px; margin: 0 auto; display: flex; gap: 14px; align-items: center; }
-    .tray h3 { font-family: var(--display); font-weight: normal; margin: 0; font-size: 20px; text-shadow: 2px 2px 0 var(--ink); white-space: nowrap; }
-    .slots { display: flex; gap: 10px; overflow-x: auto; flex: 1; padding: 16px 12px 14px; min-height: 84px; align-items: center; }
+    .tray.resizing { transition: none; }
+    .sheet-grab { flex: none; padding: 0 14px 10px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .tray.resizing .sheet-grab { cursor: grabbing; }
+    .sheet-handle {
+      display: block; margin: 0 auto; width: 90px; height: 26px; padding: 0; background: none; border: 0; cursor: inherit; touch-action: none;
+    }
+    .sheet-handle span {
+      display: block; width: 58px; height: 9px; margin: 8px auto 0; border-radius: 99px;
+      background: #fff; border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink);
+      transition: transform .2s;
+    }
+    .sheet-grab:hover .sheet-handle span { transform: scaleX(1.12); }
+    .tray-inner { max-width: 1100px; width: 100%; margin: 0 auto; display: flex; gap: 12px; align-items: center; }
+    .tray h3 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--display); font-weight: normal; margin: 0; font-size: 20px; text-shadow: 2px 2px 0 var(--ink); white-space: nowrap; }
+    #trayCount { display: inline-block; }
+    #trayCount.bump { animation: bump .45s cubic-bezier(.3, 1.8, .5, 1); }
+    @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.6) rotate(-8deg); } 100% { transform: scale(1); } }
+    .tray .hint-peek { display: none; font-family: var(--body); font-size: 12px; font-weight: 600; opacity: .85; text-shadow: none; margin-left: 6px; }
+    .tray.collapsed .hint-peek { display: inline; }
+    /* The picks wrap into rows and scroll inside the sheet. */
+    .slots {
+      position: relative; flex: 1; min-height: 0; width: 100%; max-width: 1100px; margin: 0 auto;
+      display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px; padding: 12px 14px 16px;
+      overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+      border-top: 3px dashed rgba(255, 255, 255, .35);
+    }
     .slot {
       position: relative; flex: 0 0 auto; width: 64px; height: 64px; border: 3px solid var(--ink); border-radius: 10px;
-      background: #fff center/cover; box-shadow: 3px 3px 0 var(--ink); cursor: grab; touch-action: none;
+      background: #fff center/cover; box-shadow: 3px 3px 0 var(--ink); cursor: grab; touch-action: pan-y; -webkit-touch-callout: none; user-select: none;
     }
     .slot.empty { background: rgba(255,255,255,.18); border-style: dashed; border-color: #fff; box-shadow: none; cursor: default; }
     .slot .n {
       position: absolute; top: -10px; left: -10px; width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--ink);
       display: grid; place-items: center; font-family: var(--display); font-size: 14px; padding-top: 2px; color: #fff; text-shadow: 1px 1px 0 var(--ink);
+      transition: background .15s;
     }
-    .slots { overscroll-behavior-x: contain; }
     .sorting .slot:not(.lifted):not(.landing) { transition: transform .22s cubic-bezier(.2, .9, .3, 1.15); }
     .slot.lifted {
       z-index: 10; cursor: grabbing; transition: none;
       box-shadow: 9px 12px 0 rgba(17, 17, 17, .45); outline: 4px solid var(--yellow);
     }
     .slot.landing { z-index: 10; transition: transform .2s cubic-bezier(.2, .9, .3, 1.2); }
-    .slot .n { transition: background .15s; }
-    .tray .empty-msg { opacity: .85; font-weight: 600; }
     .tray .btn { white-space: nowrap; }
     @media (max-width: 640px) {
-      .tray { padding: 8px 10px 6px; }
-      .tray-inner { flex-wrap: wrap; gap: 8px; }
-      .tray h3 { flex: 1; font-size: 17px; }
-      .slots { order: 3; width: 100%; flex: none; min-height: 0; padding: 10px 4px 4px; gap: 8px; }
+      .sheet-grab { padding: 0 10px 8px; }
+      .tray-inner { gap: 8px; }
+      .tray h3 { font-size: 17px; }
+      .tray.collapsed .hint-peek, .tray .hide-sm { display: none; }
+      .tray .btn.small { font-size: 14px; padding: 7px 10px 4px; }
+      .slots { gap: 8px; padding: 12px 10px 14px; }
       .slot { width: 52px; height: 52px; }
     }
 
@@ -79,12 +106,15 @@
   </div>
 
   <div class="tray" id="tray" hidden>
-    <div class="tray-inner">
-      <h3>Your ballot <span id="trayCount"></span></h3>
-      <div class="slots" id="slots"></div>
-      <button class="btn yellow small" id="clearBtn" title="Clear your whole ballot">✕ Clear all</button>
-      <button class="btn" id="submitBtn">Lock it in!</button>
+    <div class="sheet-grab" id="sheetGrab">
+      <button class="sheet-handle" id="sheetHandle" aria-label="Show or hide your ballot" aria-expanded="true"><span></span></button>
+      <div class="tray-inner">
+        <h3><span class="hide-sm">Your </span>ballot <span id="trayCount"></span><span class="hint-peek">tap or drag up</span></h3>
+        <button class="btn yellow small" id="clearBtn" title="Clear your whole ballot">✕ Clear all</button>
+        <button class="btn small" id="submitBtn">Lock it in!</button>
+      </div>
     </div>
+    <div class="slots" id="slots"></div>
   </div>
 
   <script type="module" src="vote.js"></script>

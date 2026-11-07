@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const docs = path.join(root, 'docs');
@@ -40,8 +41,32 @@ const ss = {
   insertSheet: (n) => { const s = new FakeSheet(n); sheets.set(n, s); return s; },
   toast: () => {},
 };
+// UrlFetchApp is synchronous in Apps Script, so use curl to match.
+const UrlFetchApp = {
+  fetch(url, opt = {}) {
+    const args = ['-s', '-w', '\n%{http_code}', '-X', (opt.method || 'get').toUpperCase()];
+    if (opt.contentType) args.push('-H', `Content-Type: ${opt.contentType}`);
+    if (opt.payload != null) args.push('--data-binary', String(opt.payload));
+    const out = execFileSync('curl', [...args, url], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+    const cut = out.lastIndexOf('\n');
+    const body = out.slice(0, cut), code = Number(out.slice(cut + 1));
+    return { getResponseCode: () => code, getContentText: () => body };
+  },
+};
+// CacheService with expiry, like the real one.
+const store = new Map();
+const scriptCache = {
+  get(k) { const e = store.get(k); if (!e || e.exp < Date.now()) { store.delete(k); return null; } return e.v; },
+  put(k, v, ttl = 600) { store.set(k, { v, exp: Date.now() + ttl * 1000 }); },
+  getAll(keys) { const o = {}; for (const k of keys) { const v = scriptCache.get(k); if (v != null) o[k] = v; } return o; },
+  putAll(obj, ttl) { for (const [k, v] of Object.entries(obj)) scriptCache.put(k, v, ttl); },
+};
+
 const ctx = vm.createContext({
-  SpreadsheetApp: { getActive: () => ss, getUi: () => ({ createMenu: () => ({ addItem() { return this; }, addToUi() {} }) }) },
+  UrlFetchApp,
+  CacheService: { getScriptCache: () => scriptCache },
+  ScriptApp: { getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: () => ({ timeBased: () => ({ everyMinutes: () => ({ create() {} }) }) }) },
+  SpreadsheetApp: { getActive: () => ss, getUi: () => ({ createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   Utilities: { getUuid: () => crypto.randomUUID() },
   ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s) => ({ text: s, setMimeType() { return this; } }) },
@@ -54,6 +79,9 @@ const settings = sheets.get('Settings');
 settings.set(2, 2, 'Photo Music League (local test)');
 settings.set(3, 2, 3);
 settings.set(4, 2, 'Open');
+// The iCloud album the ballot photos come from (override with ALBUM_LINK=...).
+const ALBUM_LINK = process.env.ALBUM_LINK ?? 'https://www.icloud.com/sharedalbum/#D26v3Zx8SZ7Ar7GvcFTVhziaa-gCAEQARogdzo6VXDw0rKF_Ae1d77BuoNta5rjz9d0xO88wChbyRM';
+ctx.setSetting_('Album link', ALBUM_LINK);
 const voters = sheets.get('Voters');
 [['Ben', '(555) 010-0001'], ['Jess', '555-010-0002'], ['Sam', '+1 555 010 0003'], ['Alex', '5550100004']]
   .forEach((v) => voters.appendRow([...v, '']));
@@ -67,11 +95,13 @@ http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      const t0 = Date.now();
       const out = req.method === 'POST'
         ? ctx.doPost({ postData: { contents: body } })
         : ctx.doGet({ parameter: Object.fromEntries(url.searchParams) });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(out.text);
+      console.log(`  api ${req.method} ${url.searchParams.get('action') || 'post'} ${Date.now() - t0}ms`);
     });
     return;
   }
@@ -89,6 +119,15 @@ http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
   fs.createReadStream(file).pipe(res);
 }).listen(PORT, () => {
+  if (ALBUM_LINK) {
+    const warm = () => {
+      const t0 = Date.now();
+      try { ctx.refreshAlbum(); console.log(`  📸  Album cache warmed in ${((Date.now() - t0) / 1000).toFixed(1)}s`); }
+      catch (err) { console.log(`  ⚠️  Album refresh failed: ${err.message}`); }
+    };
+    setTimeout(warm, 50);
+    setInterval(warm, 5 * 60 * 1000);
+  }
   console.log(`\n  🏇  Local preview: http://localhost:${PORT}`);
   console.log('  Fake sheet has 4 voters: phones 5550100001 to 5550100004');
   console.log(`  Inspect the fake sheet: http://localhost:${PORT}/dev-sheet\n`);

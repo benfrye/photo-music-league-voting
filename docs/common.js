@@ -43,14 +43,6 @@ export async function apiPost(body) {
   return parse(await fetch(API_URL, { method: 'POST', body: JSON.stringify(body) }));
 }
 
-// The photo list lives next to the site (written by `npm run sync`).
-export async function loadPhotos() {
-  const res = await fetch(`photos.json?_=${Date.now()}`);
-  if (!res.ok) return [];
-  const list = await res.json();
-  return list.filter((p) => !p.hidden);
-}
-
 export function confetti(n = 120) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const box = document.createElement('div');
@@ -116,4 +108,64 @@ export function ask({ title = 'Are you sure?', body = '', yes = 'Yes', no = 'Nev
     document.body.appendChild(back);
     back.querySelector('[data-a="no"]').focus();
   });
+}
+
+// ---------------------------------------------------------------- photos
+// Photos come live from the iCloud album named in the sheet's "Album link",
+// through the Apps Script. The photo list (usually with every image link
+// bundled in) arrives first so pages can draw every box; any links that
+// weren't cached stream in afterwards and get dropped into the boxes.
+
+const urlCache = new Map(); // id -> { thumb, src }
+export const photoUrl = (id, size = 'thumb') => urlCache.get(id)?.[size] || '';
+
+export function applyUrls(urls) {
+  for (const [id, u] of Object.entries(urls || {})) {
+    urlCache.set(id, u);
+    const sel = CSS.escape(id);
+    for (const img of document.querySelectorAll(`img[data-photo="${sel}"]`)) {
+      const want = u[img.dataset.size || 'thumb'];
+      if (want && img.getAttribute('src') !== want) img.src = want;
+    }
+    for (const el of document.querySelectorAll(`[data-bg-photo="${sel}"]`)) {
+      if (u.thumb) el.style.backgroundImage = `url("${u.thumb}")`;
+    }
+  }
+}
+
+export function picHTML(id, alt = '', size = 'thumb') {
+  const u = photoUrl(id, size);
+  return `<div class="pic"><img data-photo="${esc(id)}" data-size="${size}" ${u ? `src="${esc(u)}"` : ''} alt="${esc(alt)}" decoding="async"></div>`;
+}
+
+// Fade each photo in as it lands; if a link has expired, fetch a fresh one once.
+document.addEventListener('load', (e) => {
+  const t = e.target;
+  if (t.tagName === 'IMG' && t.dataset.photo) t.classList.add('loaded');
+}, true);
+const retried = new Set();
+document.addEventListener('error', async (e) => {
+  const t = e.target;
+  if (t.tagName !== 'IMG' || !t.dataset.photo || !t.getAttribute('src') || retried.has(t.dataset.photo)) return;
+  retried.add(t.dataset.photo);
+  try { applyUrls((await apiGet('photoUrls', { ids: t.dataset.photo, fresh: '1' })).urls); } catch { /* give up quietly */ }
+}, true);
+
+export async function loadAlbum() {
+  const a = await apiGet('album');
+  applyUrls(a.urls); // usually all of them, straight from the cache
+  return { photos: a.photos };
+}
+
+// Fetch any image links the album call didn't include, in small parallel batches.
+export async function loadPhotoUrls(album, { batch = 12, onProgress } = {}) {
+  const ids = album.photos.map((p) => p.id).filter((id) => !urlCache.has(id));
+  let done = album.photos.length - ids.length;
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += batch) chunks.push(ids.slice(i, i + batch));
+  await Promise.all(chunks.map(async (c) => {
+    try { applyUrls((await apiGet('photoUrls', { ids: c.join(',') })).urls); } catch (err) { console.warn(err); }
+    done += c.length;
+    onProgress?.(done, album.photos.length);
+  }));
 }

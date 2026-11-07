@@ -1,4 +1,4 @@
-import { $, $$, apiPost, loadPhotos, esc, toast, confetti, lightbox, ask, COLORS } from './common.js';
+import { $, $$, apiPost, loadAlbum, loadPhotoUrls, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js';
 
 const phone = localStorage.getItem('phone');
 if (!phone) location.replace('index.html');
@@ -13,7 +13,10 @@ const color = (i) => COLORS[i % COLORS.length];
 
 async function load() {
   try {
-    const [me, photos] = await Promise.all([apiPost({ action: 'me', phone }), loadPhotos()]);
+    const [me, album] = await Promise.all([apiPost({ action: 'me', phone }), loadAlbum()]);
+    // Boxes draw right away; images stream in behind them.
+    if (me.league.status !== 'setup') loadPhotoUrls(album);
+    const photos = album.photos;
     data = {
       election: { title: me.league.title, seats: me.league.rounds, status: me.league.status },
       voter: { name: me.voter.name, votedAt: me.voter.voted },
@@ -64,7 +67,7 @@ function renderDone() {
       <div class="grid" style="margin-top:40px;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
         ${data.ballot.filter((id) => photoById.has(id)).map((id, i) => `
           <div class="ph picked" style="cursor:default"><span class="rank" style="background:${color(i)};width:40px;height:40px;font-size:20px">${i + 1}</span>
-          <img src="${esc(photoById.get(id).thumb)}" alt=""></div>`).join('')}
+          ${picHTML(id)}</div>`).join('')}
       </div>
     </div>`;
   $('#editBtn').onclick = () => { editing = true; ranking = data.ballot.filter((id) => photoById.has(id)); renderBallot(); };
@@ -77,18 +80,19 @@ function renderBallot() {
     <div class="how">
       <div><b>1</b> Tap photos in order. First tap = your #1 favorite.</div>
       <div><b>2</b> Rank as many as you like. We're picking ${seats} round${seats === 1 ? '' : 's'}, so try for at least ${seats}.</div>
-      <div><b>3</b> Drag in your ballot tray to reorder, then lock it in!</div>
+      <div><b>3</b> Reorder in your ballot tray (press &amp; hold on phones), then lock it in!</div>
     </div>
     <div class="grid" id="grid">
       ${data.photos.map((p) => `
         <div class="ph" data-id="${esc(p.id)}" role="button" tabindex="0" aria-label="Photo ${esc(p.caption || '')}">
-          <img src="${esc(p.thumb)}" loading="lazy" alt="${esc(p.caption || '')}">
+          ${picHTML(p.id, p.caption)}
           <button class="zoom" data-zoom="${esc(p.id)}" aria-label="Look closer">🔍</button>
           <div class="cap">${esc(p.contributor ? `📸 ${p.contributor}` : p.caption || '')}</div>
         </div>`).join('')}
     </div>`;
   $('#tray').hidden = false;
   paint();
+  setSheet(sheetState);
 }
 
 function paint() {
@@ -105,7 +109,7 @@ function paint() {
   const seats = data.election.seats;
   $('#trayCount').textContent = ranking.length ? `(${ranking.length})` : '';
   const slots = ranking.map((id, i) => `
-    <div class="slot" data-id="${esc(id)}" style="background-image:url('${esc(photoById.get(id).thumb)}')" title="Drag to reorder, tap to remove">
+    <div class="slot" data-id="${esc(id)}" data-bg-photo="${esc(id)}" style="${photoUrl(id) ? `background-image:url('${esc(photoUrl(id))}')` : ''}" title="Drag to reorder, tap to remove">
       <span class="n" style="background:${color(i)}">${i + 1}</span>
     </div>`);
   for (let i = ranking.length; i < seats; i++) slots.push(`<div class="slot empty"><span class="n" style="background:${color(i)}">${i + 1}</span></div>`);
@@ -113,17 +117,19 @@ function paint() {
   $('#submitBtn').disabled = ranking.length === 0;
   $('#clearBtn').hidden = ranking.length === 0;
   $('#submitBtn').textContent = editing ? 'Update ballot!' : 'Lock it in!';
+  if (sheetState === 'full' && !$('#tray').hidden) setSheet('full'); // tall sheet fits its picks
 }
 
 function toggle(id) {
   const i = ranking.indexOf(id);
   if (i >= 0) ranking.splice(i, 1); else ranking.push(id);
   paint();
+  if (sheetState === 'peek') { const c = $('#trayCount'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
 }
 
 $('#main').addEventListener('click', (ev) => {
   const z = ev.target.closest('[data-zoom]');
-  if (z) { const p = photoById.get(z.dataset.zoom); showPhoto(p.src, [p.caption, p.contributor && `📸 ${p.contributor}`].filter(Boolean).join(' · ')); return; }
+  if (z) { const p = photoById.get(z.dataset.zoom); showPhoto(photoUrl(p.id, 'src') || photoUrl(p.id), [p.caption, p.contributor && `📸 ${p.contributor}`].filter(Boolean).join(' · ')); return; }
   const card = ev.target.closest('#grid .ph');
   if (card) toggle(card.dataset.id);
 });
@@ -133,45 +139,56 @@ $('#main').addEventListener('keydown', (ev) => {
 });
 
 // ----- tray: tap to remove, drag (mouse or touch) to reorder -----
-// The picked-up photo lifts and follows the pointer; the others slide aside to
-// open a gap where it will land. Works the same in both directions.
+// The tray wraps into rows. The picked-up photo lifts and follows the pointer;
+// the others glide to where they'll end up, across rows if needed.
+// Mouse: drag right away. Touch: swipe scrolls the tray, press-and-hold lifts.
 const slotsEl = $('#slots');
 let drag = null;
 
 function filledSlots() { return $$('.slot:not(.empty)', slotsEl); }
 
-function travelled(d) { return d.dx + (slotsEl.scrollLeft - d.scroll0); }
-
-function targetIndex(d) {
-  return Math.max(0, Math.min(d.count - 1, d.from + Math.round(travelled(d) / d.step)));
+// Pointer position inside the tray's scrollable content.
+function contentPoint(x, y) {
+  const r = slotsEl.getBoundingClientRect();
+  return { x: x - r.left - slotsEl.clientLeft + slotsEl.scrollLeft, y: y - r.top - slotsEl.clientTop + slotsEl.scrollTop };
 }
 
 function layout(d) {
-  const to = targetIndex(d);
+  const pt = contentPoint(d.x, d.y);
+  const cx = pt.x + d.grab.x, cy = pt.y + d.grab.y; // where the lifted photo's centre is
+  let to = d.from, best = Infinity;
+  d.homes.forEach((h, i) => { const dist = (h.x - cx) ** 2 + (h.y - cy) ** 2; if (dist < best) { best = dist; to = i; } });
   d.to = to;
   d.slots.forEach((el, i) => {
     if (i === d.from) return;
-    let shift = 0;
-    if (d.from < to && i > d.from && i <= to) shift = -d.step;   // slide left to fill
-    if (to < d.from && i >= to && i < d.from) shift = d.step;    // slide right to make room
-    el.style.transform = shift ? `translateX(${shift}px)` : '';
-    // Live rank numbers: where each photo ends up if dropped now.
-    const rank = i + Math.sign(shift);
-    const n = $('.n', el); n.textContent = rank + 1; n.style.background = color(rank);
+    let j = i;                                   // where this photo will sit
+    if (d.from < to && i > d.from && i <= to) j = i - 1;
+    if (to < d.from && i >= to && i < d.from) j = i + 1;
+    const dx = d.homes[j].x - d.homes[i].x, dy = d.homes[j].y - d.homes[i].y;
+    el.style.transform = dx || dy ? `translate(${dx}px, ${dy}px)` : '';
+    const n = $('.n', el); n.textContent = j + 1; n.style.background = color(j);
   });
   const n = $('.n', d.el); n.textContent = to + 1; n.style.background = color(to);
-  d.el.style.transform = `translate(${travelled(d)}px, ${d.dy}px) scale(1.18) rotate(-5deg)`;
+  const home = d.homes[d.from];
+  d.el.style.transform = `translate(${cx - home.x}px, ${cy - home.y}px) scale(1.18) rotate(-5deg)`;
 }
 
-// Drag near the tray's edge to scroll it (long ballots).
+// Drag near an edge of the tray to scroll it.
 function autoScroll() {
-  if (!drag || !drag.moved) return;
+  if (!drag || !drag.lifted) return;
   const r = slotsEl.getBoundingClientRect();
-  const edge = 40;
-  let v = 0;
-  if (drag.x < r.left + edge) v = -Math.ceil((r.left + edge - drag.x) / 4);
-  else if (drag.x > r.right - edge) v = Math.ceil((drag.x - (r.right - edge)) / 4);
-  if (v) { slotsEl.scrollLeft += v; layout(drag); }
+  const edge = 36;
+  const speed = (over) => Math.ceil(over / 3);
+  let vx = 0, vy = 0;
+  if (drag.y < r.top + edge) vy = -speed(r.top + edge - drag.y);
+  else if (drag.y > r.bottom - edge) vy = speed(drag.y - (r.bottom - edge));
+  if (drag.x < r.left + edge) vx = -speed(r.left + edge - drag.x);
+  else if (drag.x > r.right - edge) vx = speed(drag.x - (r.right - edge));
+  if (vx || vy) {
+    const before = [slotsEl.scrollLeft, slotsEl.scrollTop];
+    slotsEl.scrollLeft += vx; slotsEl.scrollTop += vy;
+    if (before[0] !== slotsEl.scrollLeft || before[1] !== slotsEl.scrollTop) layout(drag);
+  }
   drag.raf = requestAnimationFrame(autoScroll);
 }
 
@@ -179,40 +196,57 @@ slotsEl.addEventListener('pointerdown', (ev) => {
   const el = ev.target.closest('.slot:not(.empty)');
   if (!el || drag) return;
   const slots = filledSlots();
-  const step = slots.length > 1 ? slots[1].offsetLeft - slots[0].offsetLeft : el.offsetWidth + 10;
+  const homes = slots.map((s) => ({ x: s.offsetLeft + s.offsetWidth / 2, y: s.offsetTop + s.offsetHeight / 2 }));
+  const from = slots.indexOf(el);
+  const pt = contentPoint(ev.clientX, ev.clientY);
   drag = {
-    el, slots, step, from: slots.indexOf(el), to: slots.indexOf(el), count: slots.length,
-    x0: ev.clientX, y0: ev.clientY, x: ev.clientX, dx: 0, dy: 0, scroll0: slotsEl.scrollLeft, moved: false,
+    el, slots, homes, from, to: from, touch: ev.pointerType === 'touch',
+    grab: { x: homes[from].x - pt.x, y: homes[from].y - pt.y }, // keep the photo where you grabbed it
+    x0: ev.clientX, y0: ev.clientY, x: ev.clientX, y: ev.clientY, lifted: false,
   };
   try { el.setPointerCapture(ev.pointerId); } catch { /* pointer already gone */ }
+  if (drag.touch) drag.hold = setTimeout(() => lift(drag), 200);
 });
+
+function lift(d) {
+  if (!d || d !== drag || d.lifted) return;
+  d.lifted = true;
+  slotsEl.classList.add('sorting');
+  d.el.classList.add('lifted');
+  navigator.vibrate?.(8);
+  layout(d);
+  d.raf = requestAnimationFrame(autoScroll);
+}
+
+// Once a photo is lifted, stop the finger from scrolling the page/tray.
+slotsEl.addEventListener('touchmove', (ev) => { if (drag?.lifted) ev.preventDefault(); }, { passive: false });
 
 slotsEl.addEventListener('pointermove', (ev) => {
   if (!drag) return;
   drag.x = ev.clientX;
-  drag.dx = ev.clientX - drag.x0;
-  drag.dy = Math.max(-10, Math.min(10, (ev.clientY - drag.y0) * 0.3));
-  if (!drag.moved) {
-    if (Math.hypot(drag.dx, ev.clientY - drag.y0) < 6) return;
-    drag.moved = true;
-    slotsEl.classList.add('sorting');
-    drag.el.classList.add('lifted');
-    navigator.vibrate?.(8);
-    drag.raf = requestAnimationFrame(autoScroll);
+  drag.y = ev.clientY;
+  const far = Math.hypot(ev.clientX - drag.x0, ev.clientY - drag.y0) >= 8;
+  if (!drag.lifted) {
+    if (!far) return;
+    if (drag.touch) { clearTimeout(drag.hold); drag = null; return; } // it's a swipe: let it scroll
+    lift(drag);
+    return;
   }
   layout(drag);
 });
 
-function drop() {
+function drop(ev) {
   const d = drag;
   drag = null;
   if (!d) return;
+  clearTimeout(d.hold);
   cancelAnimationFrame(d.raf);
-  if (!d.moved) { toggle(d.el.dataset.id); return; }
+  if (!d.lifted) { if (ev.type === 'pointerup') toggle(d.el.dataset.id); return; } // a tap removes it
   // Glide into the gap, then commit the new order.
+  const home = d.homes[d.from], dest = d.homes[d.to];
   d.el.classList.remove('lifted');
   d.el.classList.add('landing');
-  d.el.style.transform = `translate(${(d.to - d.from) * d.step}px, 0)`;
+  d.el.style.transform = `translate(${dest.x - home.x}px, ${dest.y - home.y}px)`;
   const id = d.el.dataset.id;
   let done = false;
   const finish = () => {
@@ -221,9 +255,9 @@ function drop() {
     ranking.splice(d.from, 1);
     ranking.splice(d.to, 0, id);
     slotsEl.classList.remove('sorting');
-    const keep = slotsEl.scrollLeft;
+    const keep = [slotsEl.scrollLeft, slotsEl.scrollTop];
     paint();
-    slotsEl.scrollLeft = keep;
+    [slotsEl.scrollLeft, slotsEl.scrollTop] = keep;
   };
   d.el.addEventListener('transitionend', finish, { once: true });
   setTimeout(finish, 260);
@@ -232,6 +266,84 @@ function drop() {
 slotsEl.addEventListener('pointerup', drop);
 slotsEl.addEventListener('pointercancel', drop);
 slotsEl.addEventListener('dragstart', (ev) => ev.preventDefault());
+
+// ----- bottom sheet: drag the handle/header up or down, or tap to tuck it away -----
+const trayEl = $('#tray');
+const grabEl = $('#sheetGrab');
+let sheetState = sessionStorage.getItem('sheet') || 'half';
+let sheetDrag = null;
+
+function sheetSnaps() {
+  const peek = grabEl.offsetHeight + 6;
+  const row = innerWidth <= 640 ? 60 : 74;
+  const half = Math.min(peek + row * 2 + 30, innerHeight * 0.5);
+  // Tall mode grows to fit your picks, up to 80% of the screen.
+  const content = peek + $('#slots').scrollHeight + 8;
+  const full = Math.max(half + 40, Math.min(innerHeight * 0.8, content));
+  return { peek, half, full };
+}
+
+function setSheet(state) {
+  const snaps = sheetSnaps();
+  sheetState = snaps[state] ? state : 'half';
+  const h = Math.round(snaps[sheetState]);
+  document.documentElement.style.setProperty('--sheet-h', `${h}px`);
+  trayEl.style.height = '';
+  trayEl.classList.toggle('collapsed', sheetState === 'peek');
+  $('#sheetHandle').setAttribute('aria-expanded', String(sheetState !== 'peek'));
+  sessionStorage.setItem('sheet', sheetState);
+}
+
+grabEl.addEventListener('pointerdown', (ev) => {
+  if (ev.button > 0 || ev.target.closest('button:not(.sheet-handle)')) return; // let Clear / Lock it in work
+  sheetDrag = { y0: ev.clientY, h0: trayEl.offsetHeight, lastY: ev.clientY, lastT: performance.now(), v: 0, moved: false };
+  try { grabEl.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
+});
+
+grabEl.addEventListener('pointermove', (ev) => {
+  const d = sheetDrag;
+  if (!d) return;
+  const dy = ev.clientY - d.y0;
+  if (!d.moved && Math.abs(dy) < 5) return;
+  if (!d.moved) { d.moved = true; trayEl.classList.add('resizing'); }
+  const { peek, full } = sheetSnaps();
+  let h = d.h0 - dy;
+  if (h < peek) h = peek - (peek - h) * 0.25;   // a little rubber-band past the ends
+  if (h > full) h = full + (h - full) * 0.25;
+  trayEl.style.height = `${h}px`;
+  const now = performance.now();
+  d.v = (ev.clientY - d.lastY) / Math.max(1, now - d.lastT); // px/ms, + is downward
+  d.lastY = ev.clientY; d.lastT = now;
+});
+
+function endSheetDrag(ev) {
+  const d = sheetDrag;
+  sheetDrag = null;
+  if (!d) return;
+  trayEl.classList.remove('resizing');
+  if (!d.moved) {
+    if (ev.type === 'pointerup') setSheet(sheetState === 'peek' ? 'half' : 'peek'); // tap toggles
+    return;
+  }
+  const h = trayEl.offsetHeight;
+  const snaps = sheetSnaps();
+  const order = ['peek', 'half', 'full'];
+  let target;
+  if (d.v < -0.45) target = order.find((k) => snaps[k] > h + 8) || 'full';          // flicked up
+  else if (d.v > 0.45) target = [...order].reverse().find((k) => snaps[k] < h - 8) || 'peek'; // flicked down
+  else target = order.reduce((a, k) => (Math.abs(snaps[k] - h) < Math.abs(snaps[a] - h) ? k : a), 'half');
+  // Animate from where the finger left it to the snap point.
+  trayEl.style.height = `${h}px`;
+  void trayEl.offsetHeight;
+  setSheet(target);
+}
+grabEl.addEventListener('pointerup', endSheetDrag);
+grabEl.addEventListener('pointercancel', endSheetDrag);
+$('#sheetHandle').addEventListener('keydown', (ev) => {
+  if (ev.key === 'ArrowUp') { ev.preventDefault(); setSheet(sheetState === 'peek' ? 'half' : 'full'); }
+  if (ev.key === 'ArrowDown') { ev.preventDefault(); setSheet(sheetState === 'full' ? 'half' : 'peek'); }
+});
+addEventListener('resize', () => { if (!trayEl.hidden) setSheet(sheetState); });
 
 $('#clearBtn').onclick = async () => {
   const ok = await ask({
