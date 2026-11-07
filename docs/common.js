@@ -1,4 +1,4 @@
-import { API_URL } from './config.js?v=mw6gc5yw';
+import { API_URL } from './config.js?v=mw6gd945';
 
 // Shared helpers for every page.
 // Self-update: each publish writes version.json. If this page is an older
