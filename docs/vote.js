@@ -1,4 +1,4 @@
-import { $, $$, apiGet, apiPost, loadAlbum, loadPhotoUrls, cachedAlbum, remember, recall, forget, phoneKey, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js?v=mw6g0r3r';
+import { $, $$, apiGet, apiPost, loadAlbum, loadPhotoUrls, cachedAlbum, remember, recall, forget, phoneKey, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js?v=mw6gaw3m';
 
 const phone = localStorage.getItem('phone');
 if (!phone) location.replace('index.html');
@@ -10,6 +10,9 @@ const photoById = new Map();
 const draftKey = `ballot:${String(phone).replace(/\D/g, '')}`;
 
 const color = (i) => COLORS[i % COLORS.length];
+const BACKUP_GREY = '#9a9a9a';
+const isBackup = (i) => !!data && i >= data.election.seats; // ranked past the number of rounds
+const rankColor = (i) => (isBackup(i) ? BACKUP_GREY : color(i));
 
 const meKey = `me:${phoneKey(phone)}`;
 let rendered = null; // which screen is up: 'skeleton' | 'setup' | 'closed' | 'done' | 'ballot' | 'error'
@@ -125,8 +128,8 @@ function renderDone(saveState = '') {
   $('#main').innerHTML = `
     <div class="card done-box">
       <div class="stamp">VOTED!</div>
-      ${saveState ? `<div><span class="save-chip ${saveState}" id="saveChip">${saveState === 'saving' ? 'Saving your ballot…' : 'Saved ✓'}</span></div>` : ''}
-      <p style="font-size:20px;margin-top:${saveState ? 14 : 34}px">Your ballot is in the saddle. <b id="doneCount">${voted}/${total}</b> people have voted.</p>
+      ${saveState ? `<div class="save-row"><span class="save-chip ${saveState}" id="saveChip">${saveState === 'saving' ? 'Saving your ballot…' : 'Saved ✓'}</span></div>` : ''}
+      <p style="font-size:20px;margin-top:${saveState ? 22 : 34}px">Your ballot is in the saddle. <b id="doneCount">${voted}/${total}</b> people have voted.</p>
       <p>Results unlock the moment the last person votes.</p>
       <div class="actions-row">
         <a class="btn purple" href="results.html">Watch the results page 🏇</a>
@@ -134,7 +137,8 @@ function renderDone(saveState = '') {
       </div>
       <div class="grid" style="margin-top:40px;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))">
         ${data.ballot.filter((id) => photoById.has(id)).map((id, i) => `
-          <div class="ph picked" style="cursor:default"><span class="rank" style="background:${color(i)};width:40px;height:40px;font-size:20px">${i + 1}</span>
+          ${i === data.election.seats ? '<div class="deck-divider on-light"><span>Backups</span></div>' : ''}
+          <div class="ph picked${isBackup(i) ? ' deck' : ''}" style="cursor:default"><span class="rank${isBackup(i) ? ' deck' : ''}" style="background:${rankColor(i)};width:40px;height:40px;font-size:20px">${i + 1}</span>
           ${picHTML(id)}</div>`).join('')}
       </div>
     </div>`;
@@ -171,19 +175,27 @@ function paint() {
   for (const card of $$('#grid .ph')) {
     const i = pos.get(card.dataset.id);
     card.classList.toggle('picked', i !== undefined);
+    card.classList.toggle('deck', i !== undefined && isBackup(i));
     const badge = $('.rank', card);
     if (badge && i !== undefined && badge.textContent === String(i + 1)) continue;
     badge?.remove();
-    if (i !== undefined) card.insertAdjacentHTML('afterbegin', `<span class="rank" style="background:${color(i)}">${i + 1}</span>`);
+    if (i !== undefined) card.insertAdjacentHTML('afterbegin', `<span class="rank${isBackup(i) ? ' deck' : ''}" style="background:${rankColor(i)}">${i + 1}</span>`);
   }
   const seats = data.election.seats;
-  $('#trayCount').textContent = ranking.length ? `(${ranking.length})` : '';
-  const slots = ranking.map((id, i) => `
-    <div class="slot" data-id="${esc(id)}" data-bg-photo="${esc(id)}" style="${photoUrl(id) ? `background-image:url('${esc(photoUrl(id))}')` : ''}" title="Drag to reorder, tap to remove">
-      <span class="n" style="background:${color(i)}">${i + 1}</span>
-    </div>`);
+  $('#trayCount').textContent = !ranking.length ? '' : ranking.length > seats ? `(${seats} + ${ranking.length - seats})` : `(${ranking.length})`;
+  const slot = (id, i) => `
+    <div class="slot${isBackup(i) ? ' deck' : ''}" data-id="${esc(id)}" data-bg-photo="${esc(id)}" style="${photoUrl(id) ? `background-image:url('${esc(photoUrl(id))}')` : ''}" title="Drag to reorder, tap to remove">
+      <span class="n" style="background:${rankColor(i)}">${i + 1}</span>
+    </div>`;
+  const slots = ranking.slice(0, seats).map(slot);
   for (let i = ranking.length; i < seats; i++) slots.push(`<div class="slot empty"><span class="n" style="background:${color(i)}">${i + 1}</span></div>`);
-  $('#slots').innerHTML = slots.join('') || '';
+  if (ranking.length >= seats) {
+    // Past the number of rounds: backups that count if earlier picks are knocked out or already won.
+    slots.push('<div class="deck-divider"><span>Backups</span></div>');
+    ranking.slice(seats).forEach((id, k) => slots.push(slot(id, seats + k)));
+    slots.push('<div class="slot empty ghost" aria-hidden="true"><span class="plus">+</span></div>');
+  }
+  $('#slots').innerHTML = slots.join('');
   $('#submitBtn').disabled = ranking.length === 0;
   $('#clearBtn').hidden = ranking.length === 0;
   $('#submitBtn').textContent = editing ? 'Update ballot!' : 'Lock it in!';
@@ -236,9 +248,11 @@ function layout(d) {
     if (to < d.from && i >= to && i < d.from) j = i + 1;
     const dx = d.homes[j].x - d.homes[i].x, dy = d.homes[j].y - d.homes[i].y;
     el.style.transform = dx || dy ? `translate(${dx}px, ${dy}px)` : '';
-    const n = $('.n', el); n.textContent = j + 1; n.style.background = color(j);
+    const n = $('.n', el); n.textContent = j + 1; n.style.background = rankColor(j);
+    el.classList.toggle('deck', isBackup(j));
   });
-  const n = $('.n', d.el); n.textContent = to + 1; n.style.background = color(to);
+  const n = $('.n', d.el); n.textContent = to + 1; n.style.background = rankColor(to);
+  d.el.classList.toggle('deck', isBackup(to));
   const home = d.homes[d.from];
   d.el.style.transform = `translate(${cx - home.x}px, ${cy - home.y}px) scale(1.18) rotate(-5deg)`;
 }
@@ -348,7 +362,11 @@ function sheetSnaps() {
   const row = innerWidth <= 640 ? 60 : 74;
   const half = Math.min(peek + row * 2 + 30, innerHeight * 0.5);
   // Tall mode grows to fit your picks, up to 80% of the screen.
-  const content = peek + $('#slots').scrollHeight + 8;
+  // Measure the picks themselves (scrollHeight would include the sheet's current size while dragging).
+  const slotsEl2 = $('#slots');
+  const kids = [...slotsEl2.children];
+  const picksH = kids.length ? Math.max(...kids.map((k) => k.offsetTop + k.offsetHeight)) : 0;
+  const content = peek + picksH + 22;
   const full = Math.max(half + 40, Math.min(innerHeight * 0.8, content));
   return { peek, half, full };
 }

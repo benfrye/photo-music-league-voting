@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cast your ballot · Photo League</title>
-  <link rel="stylesheet" href="styles.css?v=mw6g0r3r">
+  <link rel="stylesheet" href="styles.css?v=mw6gaw3m">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Fredoka:wght@400;600;700&display=swap">
-  <link rel="modulepreload" href="vote.js?v=mw6g0r3r">
-  <link rel="modulepreload" href="common.js?v=mw6g0r3r">
-  <link rel="modulepreload" href="config.js?v=mw6g0r3r">
+  <link rel="modulepreload" href="vote.js?v=mw6gaw3m">
+  <link rel="modulepreload" href="common.js?v=mw6gaw3m">
+  <link rel="modulepreload" href="config.js?v=mw6gaw3m">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏇</text></svg>">
   <style>
     .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 26px 0 30px; }
@@ -50,7 +50,9 @@
     }
     .sheet-grab:hover .sheet-handle span { transform: scaleX(1.12); }
     .tray-inner { max-width: 1100px; width: 100%; margin: 0 auto; display: flex; gap: 12px; align-items: center; }
-    .tray h3 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--display); font-weight: normal; margin: 0; font-size: 20px; text-shadow: 2px 2px 0 var(--ink); white-space: nowrap; }
+    .tray h3 .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .tray h3 #trayCount { flex: none; }
+    .tray h3 { display: flex; gap: 6px; align-items: baseline; flex: 1; min-width: 0; font-family: var(--display); font-weight: normal; margin: 0; font-size: 20px; text-shadow: 2px 2px 0 var(--ink); white-space: nowrap; }
     #trayCount { display: inline-block; }
     #trayCount.bump { animation: bump .45s cubic-bezier(.3, 1.8, .5, 1); }
     @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.6) rotate(-8deg); } 100% { transform: scale(1); } }
@@ -68,6 +70,18 @@
       background: #fff center/cover; box-shadow: 3px 3px 0 var(--ink); cursor: grab; touch-action: pan-y; -webkit-touch-callout: none; user-select: none;
     }
     .slot.empty { background: rgba(255,255,255,.18); border-style: dashed; border-color: #fff; box-shadow: none; cursor: default; }
+    /* Backups: picks past the number of rounds. Still in play, visibly second-string. */
+    .slot.deck { filter: grayscale(.9); opacity: .72; border-style: dashed; box-shadow: none; transition: filter .2s, opacity .2s; }
+    .slot.deck.lifted { opacity: 1; }
+    .slot.ghost { display: grid; place-items: center; opacity: .55; }
+    .slot.ghost .plus { font-family: var(--display); font-size: 30px; line-height: 1; padding-top: 4px; color: #fff; }
+    .deck-divider {
+      flex: 0 0 100%; display: flex; align-items: center; gap: 10px; margin: 2px 0 4px;
+      font-family: var(--display); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: rgba(255, 255, 255, .85);
+    }
+    .deck-divider::before, .deck-divider::after { content: ''; flex: 1; border-top: 3px dashed rgba(255, 255, 255, .45); }
+    .deck-divider.on-light { grid-column: 1 / -1; color: #666; margin: 8px 0 0; }
+    .deck-divider.on-light::before, .deck-divider.on-light::after { border-top-color: #bbb; }
     .slot .n {
       position: absolute; top: -10px; left: -10px; width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--ink);
       display: grid; place-items: center; font-family: var(--display); font-size: 14px; padding-top: 2px; color: #fff; text-shadow: 1px 1px 0 var(--ink);
@@ -91,6 +105,7 @@
     }
 
     .done-box { text-align: center; padding: 40px 20px; }
+    .done-box .save-row { margin-top: 44px; }
     .done-box .stamp {
       display: inline-block; font-family: var(--display); font-size: clamp(40px, 9vw, 90px); color: var(--pink);
       border: 8px solid var(--pink); border-radius: 18px; padding: 16px 26px 6px; transform: rotate(-8deg);
@@ -115,7 +130,7 @@
     <div class="sheet-grab" id="sheetGrab">
       <button class="sheet-handle" id="sheetHandle" aria-label="Show or hide your ballot" aria-expanded="true"><span></span></button>
       <div class="tray-inner">
-        <h3><span class="hide-sm">Your </span>ballot <span id="trayCount"></span><span class="hint-peek">tap or drag up</span></h3>
+        <h3><span class="lbl"><span class="hide-sm">Your </span>ballot</span> <span id="trayCount"></span><span class="hint-peek">tap or drag up</span></h3>
         <button class="btn yellow small" id="clearBtn" title="Clear your whole ballot">✕ Clear all</button>
         <button class="btn small" id="submitBtn">Lock it in!</button>
       </div>
@@ -123,6 +138,6 @@
     <div class="slots" id="slots"></div>
   </div>
 
-  <script type="module" src="vote.js?v=mw6g0r3r"></script>
+  <script type="module" src="vote.js?v=mw6gaw3m"></script>
 </body>
 </html>
