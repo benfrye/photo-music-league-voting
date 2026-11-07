@@ -65,6 +65,8 @@ npm run dev
 
 Opens a local copy at http://localhost:8080 that runs the real `Code.gs` against a pretend sheet with four voters (phones `5550100001` through `5550100004`), using photos from the real iCloud album. Nothing touches your real Google Sheet. Peek at the pretend sheet at http://localhost:8080/dev-sheet.
 
+The local copy waits 1.5 seconds before answering each request (`API_DELAY` in `.claude/launch.json`; run `API_DELAY=0 npm run dev` to turn it off), to feel like the real Apps Script.
+
 Add `?live` to the address (http://localhost:8080/?live) to use the real sheet and deployed script instead, for example to check real-world speed.
 
 ## Publishing changes

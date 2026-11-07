@@ -1,6 +1,6 @@
-import { $, $$, apiGet, loadAlbum, loadPhotoUrls, photoUrl, esc, confetti, lightbox, COLORS } from './common.js?v=mw6eoblf';
-import { sequentialIRV } from './rcv.js?v=mw6eoblf';
-import { horseSVG } from './horse.js?v=mw6eoblf';
+import { $, $$, apiGet, loadAlbum, loadPhotoUrls, cachedAlbum, remember, recall, photoUrl, esc, confetti, lightbox, COLORS } from './common.js?v=mw6g0r3r';
+import { sequentialIRV } from './rcv.js?v=mw6g0r3r';
+import { horseSVG } from './horse.js?v=mw6g0r3r';
 
 const showPhoto = lightbox();
 
@@ -22,30 +22,51 @@ let data = null;
 let photoById = new Map();
 let pollTimer = null;
 
-async function load() {
-  const r = await apiGet('results');
+let shownKey = null;
+
+// Draw from a results response (cached or fresh). Re-draws only when something changed,
+// so a fresh copy that matches what's on screen doesn't restart the race.
+async function show(r) {
   data = { title: r.league.title, seats: r.league.rounds, status: r.league.status, voters: r.voters };
+  $('#title').textContent = data.title;
+  document.title = `Results · ${data.title}`;
   if (r.league.status === 'closed' && r.ballots) {
+    const key = `race:${r.league.rounds}:${JSON.stringify(r.ballots)}`;
+    if (shownKey === key) return;
+    clearInterval(pollTimer);
     // The jockeys need their photos before the gun goes off.
-    $('#title').textContent = data.title;
-    $('#subtitle').textContent = 'Saddling up the jockeys...';
-    const album = await loadAlbum();
-    await loadPhotoUrls(album, { onProgress: (n, total) => { $('#subtitle').textContent = `Saddling up the jockeys... ${n}/${total}`; } });
+    let album = cachedAlbum();
+    if (!album || album.photos.some((p) => !photoUrl(p.id))) {
+      $('#subtitle').textContent = 'Saddling up the jockeys...';
+      album = album && !album.photos.some((p) => !photoUrl(p.id)) ? album : await loadAlbum();
+      await loadPhotoUrls(album, { onProgress: (n, total) => { $('#subtitle').textContent = `Saddling up the jockeys... ${n}/${total}`; } });
+    }
     const photos = album.photos.map((p) => ({ ...p, thumb: photoUrl(p.id), src: photoUrl(p.id, 'src') || photoUrl(p.id) }));
     // Ranked-choice count happens right here in the browser.
     data.photos = photos;
     data.result = sequentialIRV(r.ballots, photos.map((p) => p.id), r.league.rounds, r.league.seed);
-  }
-  $('#title').textContent = data.title;
-  document.title = `Results · ${data.title}`;
-  if (data.status === 'closed' && data.result) {
-    clearInterval(pollTimer);
     photoById = new Map(data.photos.map((p) => [p.id, p]));
+    shownKey = key;
     renderRace();
+    performance.mark('screen:race');
   } else {
+    shownKey = 'waiting';
     renderWaiting();
-    if (!pollTimer) pollTimer = setInterval(() => load().catch(() => {}), 4000);
+    performance.mark('screen:waiting');
+    if (!pollTimer) pollTimer = setInterval(() => refresh().catch(() => {}), 4000);
   }
+}
+
+async function refresh() {
+  const r = await apiGet('results');
+  remember('results', r);
+  await show(r);
+}
+
+async function load() {
+  const cached = recall('results');
+  if (cached) await show(cached).catch(() => {});
+  await refresh();
 }
 
 // ---------------- waiting room ----------------

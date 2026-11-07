@@ -1,5 +1,5 @@
 // Cartoon racehorse with a photo for a jockey. Faces right.
-import { esc } from './common.js?v=mw6eoblf';
+import { esc } from './common.js?v=mw6g0r3r';
 
 let uid = 0;
 export function horseSVG({ photo, color = '#ff3ea5', mane = '#ffd400', cap = '#00c2c7', num = '' }) {

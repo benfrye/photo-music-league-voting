@@ -1,4 +1,4 @@
-import { $, $$, apiPost, loadAlbum, loadPhotoUrls, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js?v=mw6eoblf';
+import { $, $$, apiGet, apiPost, loadAlbum, loadPhotoUrls, cachedAlbum, remember, recall, forget, phoneKey, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js?v=mw6g0r3r';
 
 const phone = localStorage.getItem('phone');
 if (!phone) location.replace('index.html');
@@ -11,37 +11,104 @@ const draftKey = `ballot:${String(phone).replace(/\D/g, '')}`;
 
 const color = (i) => COLORS[i % COLORS.length];
 
-async function load() {
-  try {
-    const [me, album] = await Promise.all([apiPost({ action: 'me', phone }), loadAlbum()]);
-    // Boxes draw right away; images stream in behind them.
-    if (me.league.status !== 'setup') loadPhotoUrls(album);
-    const photos = album.photos;
-    data = {
-      election: { title: me.league.title, seats: me.league.rounds, status: me.league.status },
-      voter: { name: me.voter.name, votedAt: me.voter.voted },
-      ballot: me.ranking,
-      photos: me.league.status === 'setup' ? [] : photos,
-      progress: me.progress,
-    };
-  } catch (err) {
-    $('#greeting').textContent = 'Whoa there, partner';
-    $('#main').innerHTML = `<div class="card center"><p class="big-msg">🐴❓</p><p>${esc(err.message)}</p>
-      <p><a class="btn white" href="index.html">Try another number</a></p></div>`;
-    return;
-  }
+const meKey = `me:${phoneKey(phone)}`;
+let rendered = null; // which screen is up: 'skeleton' | 'setup' | 'closed' | 'done' | 'ballot' | 'error'
+
+function setData(me, album) {
+  data = {
+    election: { title: me.league.title, seats: me.league.rounds, status: me.league.status },
+    voter: { name: me.voter.name, votedAt: me.voter.voted },
+    ballot: me.ranking,
+    photos: me.league.status === 'setup' ? [] : album.photos,
+    progress: me.progress,
+  };
+  photoById.clear();
   data.photos.forEach((p) => photoById.set(p.id, p));
   $('#title').textContent = data.election.title;
   document.title = `Vote · ${data.election.title}`;
+}
 
-  const draft = JSON.parse(localStorage.getItem(draftKey) || 'null');
-  ranking = (draft || data.ballot).filter((id) => photoById.has(id));
-
+const screenFor = () => {
   const { status } = data.election;
-  if (status === 'setup') return renderMessage('🐴💤', "The horses aren't out of the stable yet. Voting hasn't opened. Check back soon!");
-  if (status === 'closed') return renderMessage('🏁', 'Voting is closed! The race has been run.', true);
-  if (data.voter.votedAt && !editing) return renderDone();
-  renderBallot();
+  if (status === 'setup') return 'setup';
+  if (status === 'closed') return 'closed';
+  return data.voter.votedAt && !editing ? 'done' : 'ballot';
+};
+
+function show() {
+  const screen = screenFor();
+  if (screen === 'setup') renderMessage('🐴💤', "The horses aren't out of the stable yet. Voting hasn't opened. Check back soon!");
+  else if (screen === 'closed') renderMessage('🏁', 'Voting is closed! The race has been run.', true);
+  else if (screen === 'done') renderDone();
+  else {
+    if (rendered !== 'ballot') {
+      const draft = JSON.parse(localStorage.getItem(draftKey) || 'null');
+      ranking = (draft || data.ballot).filter((id) => photoById.has(id));
+    } else {
+      ranking = ranking.filter((id) => photoById.has(id)); // keep picks; drop any photo that left the album
+    }
+    renderBallot();
+  }
+  rendered = screen;
+  performance.mark(`screen:${screen}`);
+}
+
+// Before we know anything: shimmering boxes, so the page never sits blank.
+function renderSkeleton(album) {
+  $('#greeting').textContent = 'Checking you in…';
+  $('#tray').hidden = true;
+  const ids = album ? album.photos.map((p) => p.id) : Array.from({ length: 12 }, () => '');
+  $('#main').innerHTML = `<div class="grid" style="margin-top:26px">${ids.map((id) => `
+    <div class="ph" style="cursor:default">${id ? picHTML(id) : '<div class="pic"></div>'}<div class="cap">&nbsp;</div></div>`).join('')}</div>`;
+  rendered = 'skeleton';
+  performance.mark('screen:skeleton');
+}
+
+function renderError(err) {
+  $('#greeting').textContent = 'Whoa there, partner';
+  $('#tray').hidden = true;
+  $('#main').innerHTML = `<div class="card center"><p class="big-msg">🐴❓</p><p>${esc(err.message)}</p>
+    <p><a class="btn white" href="index.html">Try another number</a></p></div>`;
+  rendered = 'error';
+}
+
+const fingerprint = () => data && JSON.stringify([data.election.status, data.election.seats, data.voter.votedAt ? 1 : 0,
+  data.voter.name, data.photos.map((p) => p.id).join()]);
+
+async function load() {
+  // 1) Draw immediately from last time, if we have it.
+  const meCached = recall(meKey);
+  const albumCached = cachedAlbum();
+  if (meCached && albumCached) { setData(meCached, albumCached); show(); } else renderSkeleton(albumCached);
+
+  // 2) Fetch fresh data and update only what changed.
+  let me, album;
+  try {
+    [me, album] = await Promise.all([apiPost({ action: 'me', phone }), loadAlbum()]);
+  } catch (err) {
+    if (/guest list|whole phone/i.test(err.message)) { // wrong number: back to check-in
+      localStorage.removeItem('phone');
+      forget(meKey);
+      return renderError(err);
+    }
+    if (rendered === 'skeleton') return renderError(err);
+    toast(`Couldn't refresh: ${err.message}`, true);
+    return;
+  }
+  remember(meKey, me);
+  const before = rendered === 'skeleton' ? null : fingerprint();
+  const wasDone = rendered === 'done';
+  setData(me, album);
+  if (!before || before !== fingerprint()) show();
+  else if (wasDone) updateCount();
+  if (me.league.status !== 'setup') loadPhotoUrls(album);
+  // Warm the results page so it opens instantly.
+  apiGet('results').then((r) => remember('results', r)).catch(() => {});
+}
+
+function updateCount() {
+  const c = $('#doneCount');
+  if (c && data) c.textContent = `${data.progress.voted}/${data.progress.total}`;
 }
 
 function renderMessage(emoji, msg, showResults = false) {
@@ -51,14 +118,15 @@ function renderMessage(emoji, msg, showResults = false) {
     ${showResults ? '<p><a class="btn purple" href="results.html">See the race 🏇</a></p>' : ''}</div>`;
 }
 
-function renderDone() {
+function renderDone(saveState = '') {
   $('#greeting').textContent = `Nice one, ${data.voter.name}!`;
   $('#tray').hidden = true;
   const { voted, total } = data.progress;
   $('#main').innerHTML = `
     <div class="card done-box">
       <div class="stamp">VOTED!</div>
-      <p style="font-size:20px;margin-top:34px">Your ballot is in the saddle. <b>${voted}/${total}</b> people have voted.</p>
+      ${saveState ? `<div><span class="save-chip ${saveState}" id="saveChip">${saveState === 'saving' ? 'Saving your ballot…' : 'Saved ✓'}</span></div>` : ''}
+      <p style="font-size:20px;margin-top:${saveState ? 14 : 34}px">Your ballot is in the saddle. <b id="doneCount">${voted}/${total}</b> people have voted.</p>
       <p>Results unlock the moment the last person votes.</p>
       <div class="actions-row">
         <a class="btn purple" href="results.html">Watch the results page 🏇</a>
@@ -70,7 +138,9 @@ function renderDone() {
           ${picHTML(id)}</div>`).join('')}
       </div>
     </div>`;
-  $('#editBtn').onclick = () => { editing = true; ranking = data.ballot.filter((id) => photoById.has(id)); renderBallot(); };
+  $('#editBtn').onclick = () => { editing = true; ranking = data.ballot.filter((id) => photoById.has(id)); renderBallot(); rendered = 'ballot'; };
+  rendered = 'done';
+  performance.mark(`screen:done${saveState ? `-${saveState}` : ''}`);
 }
 
 function renderBallot() {
@@ -358,25 +428,44 @@ $('#clearBtn').onclick = async () => {
 };
 
 $('#submitBtn').onclick = async () => {
-  const btn = $('#submitBtn'); // ev.currentTarget is null after an await
   const seats = data.election.seats;
   if (ranking.length < seats && !(await ask({
     title: `Only ${ranking.length} ranked`,
     body: `We're picking ${seats} round photos. Ranking more keeps your vote counting in later rounds.`,
     yes: 'Submit anyway', no: 'Rank more',
   }))) return;
-  btn.disabled = true;
+
+  // Show the VOTED screen right away; save in the background; undo if it fails.
+  const undo = { ballot: data.ballot, votedAt: data.voter.votedAt, voted: data.progress.voted, ranking: [...ranking], editing };
+  const firstTime = !data.voter.votedAt;
+  data.ballot = [...ranking];
+  data.voter.votedAt = new Date().toISOString();
+  if (firstTime) data.progress.voted += 1;
+  editing = false;
+  localStorage.removeItem(draftKey);
+  renderDone('saving');
+  confetti();
   try {
-    const r = await apiPost({ action: 'vote', phone, ranking });
-    localStorage.removeItem(draftKey);
-    confetti();
-    editing = false;
-    if (r.closed) { toast("You were the last vote! To the races! 🏁"); setTimeout(() => (location.href = 'results.html'), 1600); return; }
-    toast('Yeehaw! Ballot saved 🤠');
-    await load();
+    const r = await apiPost({ action: 'vote', phone, ranking: data.ballot });
+    const chip = $('#saveChip');
+    if (chip) { chip.className = 'save-chip saved'; chip.textContent = 'Saved ✓'; }
+    const meCached = recall(meKey);
+    if (meCached) {
+      remember(meKey, { ...meCached, ranking: data.ballot, voter: { ...meCached.voter, voted: data.voter.votedAt }, progress: data.progress });
+    }
+    if (r.closed) { toast('You were the last vote! To the races! 🏁'); setTimeout(() => (location.href = 'results.html'), 1600); return; }
+    // Exact vote count in the background.
+    apiPost({ action: 'me', phone }).then((me) => { remember(meKey, me); data.progress = me.progress; updateCount(); }).catch(() => {});
   } catch (err) {
-    toast(err.message, true);
-    btn.disabled = false;
+    data.ballot = undo.ballot;
+    data.voter.votedAt = undo.votedAt;
+    data.progress.voted = undo.voted;
+    ranking = undo.ranking;
+    editing = !!undo.votedAt;
+    localStorage.setItem(draftKey, JSON.stringify(ranking));
+    renderBallot();
+    rendered = 'ballot';
+    toast(`Couldn't save your ballot: ${err.message}`, true);
   }
 };
 

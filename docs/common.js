@@ -1,4 +1,4 @@
-import { API_URL } from './config.js?v=mw6eoblf';
+import { API_URL } from './config.js?v=mw6g0r3r';
 
 // Shared helpers for every page.
 // Self-update: each publish writes version.json. If this page is an older
@@ -217,6 +217,40 @@ async function loadHostedGifs() {
   } catch { return {}; }
 }
 
+// ---------------------------------------------------------------- remember & refresh
+// Pages draw instantly from what this phone saw last time, then quietly fetch
+// fresh data and update. Nothing here is trusted for counting votes; it only
+// avoids blank screens while the Apps Script (~1.5s per request) answers.
+export function remember(key, value) {
+  try { localStorage.setItem(`c:${key}`, JSON.stringify({ t: Date.now(), d: value })); } catch { /* storage full/blocked */ }
+}
+export function recall(key, maxAgeMs = Infinity) {
+  try {
+    const c = JSON.parse(localStorage.getItem(`c:${key}`) || 'null');
+    if (c && Date.now() - c.t <= maxAgeMs) return c.d;
+  } catch { /* ignore */ }
+  return null;
+}
+export function forget(key) { try { localStorage.removeItem(`c:${key}`); } catch { /* ignore */ } }
+export const phoneKey = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+
+const LINK_FRESH_MS = 8 * 60 * 1000; // Apple's image links last ~20 min; reuse only recent ones
+
+function rememberAlbum(photos) {
+  remember('album', { photos, urls: Object.fromEntries(urlCache) });
+}
+
+// The photo list from last time (or null). Hosted GIF clips are always reusable;
+// Apple's image links only if they're recent (an expired one re-fetches itself anyway).
+export function cachedAlbum() {
+  const c = recall('album');
+  if (!c) return null;
+  const fresh = recall('album', LINK_FRESH_MS);
+  const urls = fresh ? c.urls : Object.fromEntries(Object.entries(c.urls || {}).filter(([, u]) => String(u.thumb || '').startsWith('gifs/')));
+  applyUrls(urls);
+  return { photos: c.photos, cached: true };
+}
+
 export async function loadAlbum() {
   const [a, gifs] = await Promise.all([apiGet('album'), loadHostedGifs()]);
   applyUrls(a.urls); // usually all of them, straight from the cache
@@ -224,6 +258,7 @@ export async function loadAlbum() {
     ? { thumb: f, src: f }
     : { thumb: f.poster, src: f.poster, video: f.video }])));
   const photos = a.photos.filter((p) => p.img !== false || gifs[p.id]);
+  rememberAlbum(photos);
   return { photos };
 }
 
@@ -239,4 +274,5 @@ export async function loadPhotoUrls(album, { batch = 12, onProgress } = {}) {
     onProgress?.(done, album.photos.length);
   }));
   for (const p of album.photos) if (!photoUrl(p.id)) markMissing(p.id);
+  if (ids.length) rememberAlbum(album.photos);
 }

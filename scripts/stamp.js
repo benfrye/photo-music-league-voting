@@ -17,8 +17,8 @@ const rules = [
   [/(from\s+'\.\/[\w-]+\.js)(\?v=[\w]+)?'/g, `$1?v=${v}'`],
   // <script type="module" src="x.js">
   [/(<script[^>]+src="[\w-]+\.js)(\?v=[\w]+)?"/g, `$1?v=${v}"`],
-  // <link rel="stylesheet" href="styles.css">
-  [/(<link[^>]+href="[\w-]+\.css)(\?v=[\w]+)?"/g, `$1?v=${v}"`],
+  // <link rel="stylesheet" href="styles.css">, <link rel="modulepreload" href="x.js">
+  [/(<link[^>]+href="[\w-]+\.(?:css|js))(\?v=[\w]+)?"/g, `$1?v=${v}"`],
 ];
 
 let changed = 0;

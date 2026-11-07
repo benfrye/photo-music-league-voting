@@ -4,7 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Photo League</title>
-  <link rel="stylesheet" href="styles.css?v=mw6eoblf">
+  <link rel="stylesheet" href="styles.css?v=mw6g0r3r">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Fredoka:wght@400;600;700&display=swap">
+  <link rel="modulepreload" href="common.js?v=mw6g0r3r">
+  <link rel="modulepreload" href="config.js?v=mw6g0r3r">
+  <link rel="modulepreload" href="horse.js?v=mw6g0r3r">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏇</text></svg>">
   <style>
     .hero { text-align: center; padding-top: 30px; }
@@ -32,25 +38,27 @@
     <p><a class="btn purple small" href="results.html">🏇 Results & race</a></p>
   </div>
   <script type="module">
-    import { $, apiGet, apiPost, toast } from './common.js?v=mw6eoblf';
-    import { horseSVG } from './horse.js?v=mw6eoblf';
+    import { $, apiGet, toast, remember, recall, loadAlbum, phoneKey } from './common.js?v=mw6g0r3r';
+    import { horseSVG } from './horse.js?v=mw6g0r3r';
     $('#horse').innerHTML = horseSVG({ color: '#ff6a00', mane: '#ff3ea5', cap: '#00c2c7', num: '1' });
     $('#phone').value = localStorage.getItem('phone') || '';
-    apiGet('results').then((r) => { $('#title').textContent = r.league.title; document.title = r.league.title; }).catch(() => {});
 
-    $('#login').addEventListener('submit', async (ev) => {
+    // League name: last known one right away, then the current one.
+    const setTitle = (r) => { if (r?.league?.title) { $('#title').textContent = r.league.title; document.title = r.league.title; } };
+    setTitle(recall('results'));
+    apiGet('results').then((r) => { remember('results', r); setTitle(r); }).catch(() => {});
+    // Warm the photo list now so the ballot can draw the moment you check in.
+    if (!recall('album', 8 * 60 * 1000)) loadAlbum().catch(() => {});
+
+    // Go straight to the ballot; it checks the number while it draws.
+    $('#login').addEventListener('submit', (ev) => {
       ev.preventDefault();
       const phone = $('#phone').value.trim();
-      $('#go').disabled = true;
-      try {
-        const me = await apiPost({ action: 'me', phone });
-        localStorage.setItem('phone', phone);
-        toast(`Howdy, ${me.voter.name}! 🤠`);
-        setTimeout(() => (location.href = 'vote.html'), 500);
-      } catch (err) {
-        toast(err.message, true);
-        $('#go').disabled = false;
-      }
+      if (phoneKey(phone).length < 7) { toast('Type your whole phone number.', true); return; }
+      localStorage.setItem('phone', phone);
+      $('#go').textContent = 'Saddling up… 🐎';
+      $('#go').classList.add('going');
+      location.href = 'vote.html';
     });
   </script>
 </body>

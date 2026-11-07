@@ -99,9 +99,12 @@ http.createServer((req, res) => {
       const out = req.method === 'POST'
         ? ctx.doPost({ postData: { contents: body } })
         : ctx.doGet({ parameter: Object.fromEntries(url.searchParams) });
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(out.text);
-      console.log(`  api ${req.method} ${url.searchParams.get('action') || 'post'} ${Date.now() - t0}ms`);
+      // API_DELAY=1500 mimics the real Apps Script's ~1.5s per request.
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(out.text);
+        console.log(`  api ${req.method} ${url.searchParams.get('action') || 'post'} ${Date.now() - t0}ms`);
+      }, Number(process.env.API_DELAY || 0));
     });
     return;
   }
