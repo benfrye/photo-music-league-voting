@@ -87,7 +87,7 @@ const voters = sheets.get('Voters');
   .forEach((v) => voters.appendRow([...v, '']));
 
 // ---------- http ----------
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.md': 'text/plain' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.mp4': 'video/mp4', '.md': 'text/plain' };
 
 http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);

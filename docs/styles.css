@@ -286,3 +286,14 @@ img[data-photo].loaded { opacity: 1; }
   content: "🐴 couldn't load"; position: absolute; inset: 0; display: grid; place-items: center;
   font-family: var(--display); font-size: 15px; color: var(--ink); text-align: center; padding: 8px;
 }
+
+/* Looping clips (GIFs, album videos) sit on top of their still frame. */
+.pic video.loop {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: 0; transition: opacity .3s; pointer-events: none;
+}
+.pic video.loop.on { opacity: 1; }
+.lightbox video {
+  max-width: 92vw; max-height: 78vh; border: 6px solid #fff; border-radius: 14px;
+  box-shadow: 10px 10px 0 var(--pink); background: #000;
+}

@@ -1,4 +1,4 @@
-import { $, $$, apiPost, loadAlbum, loadPhotoUrls, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js?v=mw6eifa2';
+import { $, $$, apiPost, loadAlbum, loadPhotoUrls, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js?v=mw6eoblf';
 
 const phone = localStorage.getItem('phone');
 if (!phone) location.replace('index.html');
@@ -129,7 +129,7 @@ function toggle(id) {
 
 $('#main').addEventListener('click', (ev) => {
   const z = ev.target.closest('[data-zoom]');
-  if (z) { const p = photoById.get(z.dataset.zoom); showPhoto(photoUrl(p.id, 'src') || photoUrl(p.id), [p.caption, p.contributor && `📸 ${p.contributor}`].filter(Boolean).join(' · ')); return; }
+  if (z) { const p = photoById.get(z.dataset.zoom); showPhoto(photoUrl(p.id, 'src') || photoUrl(p.id), [p.caption, p.contributor && `📸 ${p.contributor}`].filter(Boolean).join(' · '), photoUrl(p.id, 'video')); return; }
   const card = ev.target.closest('#grid .ph');
   if (card) toggle(card.dataset.id);
 });

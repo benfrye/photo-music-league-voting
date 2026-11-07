@@ -1,4 +1,4 @@
-import { API_URL } from './config.js?v=mw6eifa2';
+import { API_URL } from './config.js?v=mw6eoblf';
 
 // Shared helpers for every page.
 // Self-update: each publish writes version.json. If this page is an older
@@ -84,12 +84,22 @@ export function confetti(n = 120) {
 export function lightbox() {
   const lb = document.createElement('div');
   lb.className = 'lightbox';
-  lb.innerHTML = '<figure><img alt=""><figcaption></figcaption></figure>';
+  lb.innerHTML = '<figure><img alt=""><video muted loop playsinline controls hidden></video><figcaption></figcaption></figure>';
   document.body.appendChild(lb);
-  lb.addEventListener('click', () => lb.classList.remove('show'));
-  addEventListener('keydown', (e) => { if (e.key === 'Escape') lb.classList.remove('show'); });
-  return (src, caption = '') => {
-    $('img', lb).src = src;
+  const vid = $('video', lb);
+  const close = () => { lb.classList.remove('show'); vid.pause(); };
+  lb.addEventListener('click', (e) => { if (e.target !== vid) close(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  // video: optional looping clip shown instead of the still (GIFs, album videos)
+  return (src, caption = '', video = '') => {
+    $('img', lb).hidden = !!video;
+    vid.hidden = !video;
+    if (video) {
+      vid.poster = src; vid.src = video; vid.muted = true;
+      vid.play().catch(() => { /* blocked: the controls let them start it */ });
+    } else {
+      $('img', lb).src = src;
+    }
     $('figcaption', lb).textContent = caption;
     lb.classList.add('show');
   };
@@ -133,8 +143,22 @@ export function ask({ title = 'Are you sure?', body = '', yes = 'Yes', no = 'Nev
 // bundled in) arrives first so pages can draw every box; any links that
 // weren't cached stream in afterwards and get dropped into the boxes.
 
-const urlCache = new Map(); // id -> { thumb, src }
+const urlCache = new Map(); // id -> { thumb, src, video? }
 export const photoUrl = (id, size = 'thumb') => urlCache.get(id)?.[size] || '';
+
+// GIFs and videos: a silent loop laid over the still frame. iPhones play these
+// automatically (unlike GIFs, which a phone setting can freeze); if autoplay is
+// blocked, the still frame simply stays.
+function videoHTML(url) {
+  return `<video class="loop" src="${esc(url)}" muted loop playsinline autoplay preload="auto" disablepictureinpicture aria-hidden="true"></video>`;
+}
+function startLoops(root = document) {
+  for (const v of root.querySelectorAll('video.loop')) {
+    v.muted = true;
+    v.play?.().catch(() => { /* autoplay blocked: still frame shows */ });
+  }
+}
+document.addEventListener('playing', (e) => { if (e.target.classList?.contains('loop')) e.target.classList.add('on'); }, true);
 
 export function applyUrls(urls) {
   for (const [id, u] of Object.entries(urls || {})) {
@@ -143,6 +167,8 @@ export function applyUrls(urls) {
     for (const img of document.querySelectorAll(`img[data-photo="${sel}"]`)) {
       const want = u[img.dataset.size || 'thumb'];
       if (want && img.getAttribute('src') !== want) img.src = want;
+      const pic = img.closest('.pic');
+      if (u.video && pic && !pic.querySelector('video.loop')) { pic.insertAdjacentHTML('beforeend', videoHTML(u.video)); startLoops(pic); }
     }
     for (const el of document.querySelectorAll(`[data-bg-photo="${sel}"]`)) {
       if (u.thumb) el.style.backgroundImage = `url("${u.thumb}")`;
@@ -152,7 +178,9 @@ export function applyUrls(urls) {
 
 export function picHTML(id, alt = '', size = 'thumb') {
   const u = photoUrl(id, size);
-  return `<div class="pic"><img data-photo="${esc(id)}" data-size="${size}" ${u ? `src="${esc(u)}"` : ''} alt="${esc(alt)}" decoding="async"></div>`;
+  const video = photoUrl(id, 'video');
+  queueMicrotask(() => startLoops()); // iOS wants play() called on inserted videos
+  return `<div class="pic${video ? ' has-video' : ''}"><img data-photo="${esc(id)}" data-size="${size}" ${u ? `src="${esc(u)}"` : ''} alt="${esc(alt)}" decoding="async">${video ? videoHTML(video) : ''}</div>`;
 }
 
 // A photo we truly can't show gets a "couldn't load" face instead of shimmering forever.
@@ -192,7 +220,9 @@ async function loadHostedGifs() {
 export async function loadAlbum() {
   const [a, gifs] = await Promise.all([apiGet('album'), loadHostedGifs()]);
   applyUrls(a.urls); // usually all of them, straight from the cache
-  applyUrls(Object.fromEntries(Object.entries(gifs).map(([id, file]) => [id, { thumb: file, src: file }])));
+  applyUrls(Object.fromEntries(Object.entries(gifs).map(([id, f]) => [id, typeof f === 'string'
+    ? { thumb: f, src: f }
+    : { thumb: f.poster, src: f.poster, video: f.video }])));
   const photos = a.photos.filter((p) => p.img !== false || gifs[p.id]);
   return { photos };
 }

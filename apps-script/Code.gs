@@ -289,6 +289,16 @@ function pickDerivatives_(p) {
   return { t: thumb.checksum, f: full.checksum };
 }
 
+// Videos: the still frame is the "photo"; the clip plays on top of it.
+function pickVideo_(p) {
+  var ders = p.derivatives || {};
+  var poster = ders.PosterFrame;
+  var clip = ders['720p'] || ders['360p'];
+  if (!clip) Object.keys(ders).forEach(function (k) { if (k !== 'PosterFrame' && !clip) clip = ders[k]; });
+  if (!poster || !poster.checksum) return null;
+  return { t: poster.checksum, f: poster.checksum, v: clip && clip.checksum ? clip.checksum : null };
+}
+
 function fetchAlbumList_(token) {
   var host = albumHost_(token);
   var r = icloudPost_(host, token, 'webstream', { streamCtag: null });
@@ -299,7 +309,14 @@ function fetchAlbumList_(token) {
   if (r.code !== 200 || !r.json) throw new Error("Couldn't read the iCloud album (" + r.code + '). Is Public Website still turned on?');
   var photos = [];
   (r.json.photos || []).forEach(function (p) {
-    if (p.mediaAssetType === 'video') return;
+    if (p.mediaAssetType === 'video') {
+      var vd = pickVideo_(p);
+      if (vd) photos.push({
+        id: p.photoGuid, w: Number(p.width) || 0, h: Number(p.height) || 0,
+        caption: p.caption || '', contributor: p.contributorFullName || '', t: vd.t, f: vd.f, v: vd.v, kind: 'video',
+      });
+      return;
+    }
     // GIFs come through with no image versions at all (Apple doesn't serve
     // them on public links). Keep them in the list so the site can supply the
     // picture from its own gifs/ folder.
@@ -338,7 +355,7 @@ function album_() {
   a.photos.forEach(function (p) { var c = cached['u:' + p.id]; if (c) urls[p.id] = JSON.parse(c); });
   return {
     source: 'icloud', name: a.name, count: a.photos.length,
-    photos: a.photos.map(function (p) { return { id: p.id, w: p.w, h: p.h, caption: p.caption, contributor: p.contributor, img: !!p.t }; }),
+    photos: a.photos.map(function (p) { return { id: p.id, w: p.w, h: p.h, caption: p.caption, contributor: p.contributor, img: !!p.t, kind: p.kind || 'photo' }; }),
     urls: urls,
   };
 }
@@ -354,12 +371,13 @@ function fetchUrls_(a, list) {
     var items = r.json.items || {};
     var put = {};
     batch.forEach(function (p) {
-      var t = items[p.t], f = items[p.f];
+      var t = items[p.t], f = items[p.f], v = p.v ? items[p.v] : null;
       if (!t && !f) return;
       var u = {
         thumb: t ? 'https://' + t.url_location + t.url_path : null,
         src: f ? 'https://' + f.url_location + f.url_path : null,
       };
+      if (v) u.video = 'https://' + v.url_location + v.url_path;
       u.thumb = u.thumb || u.src;
       u.src = u.src || u.thumb;
       out[p.id] = u;

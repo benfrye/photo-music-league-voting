@@ -1,6 +1,6 @@
-import { $, $$, apiGet, loadAlbum, loadPhotoUrls, photoUrl, esc, confetti, lightbox, COLORS } from './common.js?v=mw6eifa2';
-import { sequentialIRV } from './rcv.js?v=mw6eifa2';
-import { horseSVG } from './horse.js?v=mw6eifa2';
+import { $, $$, apiGet, loadAlbum, loadPhotoUrls, photoUrl, esc, confetti, lightbox, COLORS } from './common.js?v=mw6eoblf';
+import { sequentialIRV } from './rcv.js?v=mw6eoblf';
+import { horseSVG } from './horse.js?v=mw6eoblf';
 
 const showPhoto = lightbox();
 
@@ -170,7 +170,7 @@ function renderRace() {
   $('#replayBtn').onclick = () => race();
   $('#main').addEventListener('click', (ev) => {
     const z = ev.target.closest('[data-zoom]');
-    if (z) { const p = photoById.get(z.dataset.zoom); showPhoto(p.src, [p.caption, p.contributor && `📸 ${p.contributor}`].filter(Boolean).join(' · ')); }
+    if (z) { const p = photoById.get(z.dataset.zoom); showPhoto(p.src, [p.caption, p.contributor && `📸 ${p.contributor}`].filter(Boolean).join(' · '), photoUrl(p.id, 'video')); }
   });
   addEventListener('resize', () => draw(lastT));
   race();
@@ -304,11 +304,14 @@ function revealPodium() {
       : 'Won on a tie-break';
     return `<div class="win">
       <span class="round" style="background:${COLORS[k % 6]}">Round ${k + 1}</span>
-      <img src="${esc(p?.src)}" data-zoom="${esc(id)}" alt="">
+      ${photoUrl(id, 'video')
+        ? `<video src="${esc(photoUrl(id, 'video'))}" poster="${esc(p?.src)}" data-zoom="${esc(id)}" muted loop playsinline autoplay></video>`
+        : `<img src="${esc(p?.src)}" data-zoom="${esc(id)}" alt="">`}
       <div class="meta">${[p?.contributor && `📸 ${esc(p.contributor)}`, p?.caption && esc(p.caption)].filter(Boolean).join(' · ')}<small>${how}</small></div>
     </div>`;
   }).join('');
   $('#podiumSec').hidden = false;
+  for (const v of pod.querySelectorAll('video')) { v.muted = true; v.play().catch(() => {}); }
   $$('.win').forEach((w, i) => setTimeout(() => w.classList.add('in'), reduced ? 0 : 120 * i));
 }
 
