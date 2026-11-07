@@ -29,7 +29,7 @@ function onOpen() {
     .addItem('Close voting now', 'closeVoting')
     .addItem('Start over (clear all ballots)', 'startOver')
     .addSeparator()
-    .addItem('Refresh album photos now', 'refreshAlbum')
+    .addItem('Refresh album photos now', 'refreshAlbumNow')
     .addItem('Keep album photos fresh (run once)', 'installAlbumRefresh')
     .addToUi();
 }
@@ -396,6 +396,14 @@ function photoUrls_(idList, fresh) {
 function refreshAlbum() {
   var a = getAlbum_(LIST_STALE_MS);
   if (a) fetchUrls_(a, a.photos.filter(function (p) { return p.t; }));
+}
+
+// Menu: re-read the album from Apple right away (e.g. after adding photos).
+function refreshAlbumNow() {
+  var a = getAlbum_(1);
+  if (a) fetchUrls_(a, a.photos.filter(function (p) { return p.t; }));
+  var ss = SpreadsheetApp.getActive();
+  if (a && typeof ss.toast === 'function') ss.toast('Album refreshed: ' + a.photos.length + ' photos.');
 }
 
 function installAlbumRefresh() {
