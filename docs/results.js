@@ -1,6 +1,6 @@
-import { $, $$, apiGet, loadAlbum, loadPhotoUrls, photoUrl, esc, confetti, lightbox, COLORS } from './common.js?v=mw6egii7';
-import { sequentialIRV } from './rcv.js?v=mw6egii7';
-import { horseSVG } from './horse.js?v=mw6egii7';
+import { $, $$, apiGet, loadAlbum, loadPhotoUrls, photoUrl, esc, confetti, lightbox, COLORS } from './common.js?v=mw6eifa2';
+import { sequentialIRV } from './rcv.js?v=mw6eifa2';
+import { horseSVG } from './horse.js?v=mw6eifa2';
 
 const showPhoto = lightbox();
 

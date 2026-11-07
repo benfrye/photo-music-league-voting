@@ -1,4 +1,4 @@
-import { $, $$, apiPost, loadAlbum, loadPhotoUrls, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js?v=mw6egii7';
+import { $, $$, apiPost, loadAlbum, loadPhotoUrls, picHTML, photoUrl, esc, toast, confetti, lightbox, ask, COLORS } from './common.js?v=mw6eifa2';
 
 const phone = localStorage.getItem('phone');
 if (!phone) location.replace('index.html');

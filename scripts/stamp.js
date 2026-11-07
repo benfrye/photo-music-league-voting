@@ -28,4 +28,6 @@ for (const f of fs.readdirSync(docs).filter((f) => /\.(html|js)$/.test(f))) {
   const after = rules.reduce((s, [re, rep]) => s.replace(re, rep), before);
   if (after !== before) { fs.writeFileSync(file, after); changed++; }
 }
+// Pages compare their own stamp with this to notice they're an old cached copy.
+fs.writeFileSync(path.join(docs, 'version.json'), `${JSON.stringify({ v })}\n`);
 console.log(`Stamped ${changed} files with v=${v}`);

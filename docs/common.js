@@ -1,6 +1,23 @@
-import { API_URL } from './config.js?v=mw6egii7';
+import { API_URL } from './config.js?v=mw6eifa2';
 
 // Shared helpers for every page.
+// Self-update: each publish writes version.json. If this page is an older
+// copy the browser kept (GitHub Pages allows 10 minutes), reload once from a
+// fresh address so everyone runs the current site.
+{
+  const pageV = new URL(import.meta.url).searchParams.get('v');
+  fetch(`version.json?_=${Date.now()}`, { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((cur) => {
+      if (!pageV || !cur?.v || cur.v === pageV || sessionStorage.getItem(`reloaded:${cur.v}`)) return;
+      sessionStorage.setItem(`reloaded:${cur.v}`, '1');
+      const u = new URL(location.href);
+      u.searchParams.set('v', cur.v);
+      location.replace(u);
+    })
+    .catch(() => {});
+}
+
 export const $ = (sel, el = document) => el.querySelector(sel);
 export const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 export const COLORS = ['#ff3ea5', '#00c2c7', '#ff6a00', '#7b4dff', '#9be22d', '#ffd400'];

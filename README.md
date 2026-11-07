@@ -73,7 +73,7 @@ Before committing a change to anything in `docs/`, run:
 npm run stamp
 ```
 
-It tags every script and stylesheet reference with a new version. GitHub Pages lets browsers reuse files for 10 minutes, and without the stamp a visitor right after a publish can end up with a mix of old and new code.
+It tags every script and stylesheet reference with a new version and writes `docs/version.json`; a page that notices it is an older cached copy reloads itself once. GitHub Pages lets browsers reuse files for 10 minutes, and without the stamp a visitor right after a publish can end up with a mix of old and new code.
 
 ## How ranked choice works here
 
