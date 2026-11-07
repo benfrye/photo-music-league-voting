@@ -300,8 +300,10 @@ function fetchAlbumList_(token) {
   var photos = [];
   (r.json.photos || []).forEach(function (p) {
     if (p.mediaAssetType === 'video') return;
-    var d = pickDerivatives_(p);
-    if (!d) return;
+    // GIFs come through with no image versions at all (Apple doesn't serve
+    // them on public links). Keep them in the list so the site can supply the
+    // picture from its own gifs/ folder.
+    var d = pickDerivatives_(p) || { t: null, f: null };
     photos.push({
       id: p.photoGuid, w: Number(p.width) || 0, h: Number(p.height) || 0,
       caption: p.caption || '', contributor: p.contributorFullName || '', t: d.t, f: d.f,
@@ -336,7 +338,7 @@ function album_() {
   a.photos.forEach(function (p) { var c = cached['u:' + p.id]; if (c) urls[p.id] = JSON.parse(c); });
   return {
     source: 'icloud', name: a.name, count: a.photos.length,
-    photos: a.photos.map(function (p) { return { id: p.id, w: p.w, h: p.h, caption: p.caption, contributor: p.contributor }; }),
+    photos: a.photos.map(function (p) { return { id: p.id, w: p.w, h: p.h, caption: p.caption, contributor: p.contributor, img: !!p.t }; }),
     urls: urls,
   };
 }
@@ -381,7 +383,7 @@ function photoUrls_(idList, fresh) {
   ids.forEach(function (id) {
     var c = cached['u:' + id];
     if (c) urls[id] = JSON.parse(c);
-    else if (byId[id]) missing.push(byId[id]);
+    else if (byId[id] && byId[id].t) missing.push(byId[id]); // GIFs have nothing to fetch
   });
   if (missing.length) {
     var got = fetchUrls_(a, missing);
@@ -393,7 +395,7 @@ function photoUrls_(idList, fresh) {
 // Timer job: keep the list and every image link warm so visitors never wait on Apple.
 function refreshAlbum() {
   var a = getAlbum_(LIST_STALE_MS);
-  if (a) fetchUrls_(a, a.photos);
+  if (a) fetchUrls_(a, a.photos.filter(function (p) { return p.t; }));
 }
 
 function installAlbumRefresh() {

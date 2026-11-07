@@ -41,6 +41,8 @@ The sheet itself can stay private (Share → General access: Restricted). The si
 
 Apple takes ~9 seconds to list an album, so the script keeps a cached copy (in Apps Script's built-in cache, not the sheet) and a timer refreshes it every 5 minutes. Visitors get the photo list and image links in one quick request, and boxes appear before the images finish loading. New photos added to the album show up within about 30 minutes; **Refresh album photos now** in the menu pulls them right away.
 
+**GIFs:** Apple's public album link doesn't serve animated GIFs, so those are stored with the site in [`docs/gifs/`](docs/gifs/), each named by its Apple photo ID. The album still decides what's on the ballot. A GIF someone adds later stays off the ballot until it's added there; see [`docs/gifs/README.md`](docs/gifs/README.md).
+
 ### 3. Publish on GitHub Pages
 1. Create a GitHub repo and push this project.
 2. Repo **Settings → Pages** → Source: **Deploy from a branch** → Branch `main`, folder **`/docs`** → Save.

@@ -151,10 +151,22 @@ document.addEventListener('error', async (e) => {
   try { applyUrls((await apiGet('photoUrls', { ids: t.dataset.photo, fresh: '1' })).urls); } catch { /* give up quietly */ }
 }, true);
 
+// Apple's public link doesn't serve GIFs, so those live in gifs/ (named by
+// their Apple ID). A GIF in the album that isn't there is left off the ballot,
+// the same way on every page.
+async function loadHostedGifs() {
+  try {
+    const res = await fetch(`gifs/index.json?_=${Date.now()}`);
+    return res.ok ? await res.json() : {};
+  } catch { return {}; }
+}
+
 export async function loadAlbum() {
-  const a = await apiGet('album');
+  const [a, gifs] = await Promise.all([apiGet('album'), loadHostedGifs()]);
   applyUrls(a.urls); // usually all of them, straight from the cache
-  return { photos: a.photos };
+  applyUrls(Object.fromEntries(Object.entries(gifs).map(([id, file]) => [id, { thumb: file, src: file }])));
+  const photos = a.photos.filter((p) => p.img !== false || gifs[p.id]);
+  return { photos };
 }
 
 // Fetch any image links the album call didn't include, in small parallel batches.
