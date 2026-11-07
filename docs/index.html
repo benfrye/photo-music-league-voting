@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo League</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏇</text></svg>">
+  <style>
+    .hero { text-align: center; padding-top: 30px; }
+    .hero .horse-box { width: min(300px, 70vw); margin: 26px auto 0; }
+    .horse { width: 100%; overflow: visible; animation: hop 1s ease-in-out infinite alternate; }
+    @keyframes hop { from { transform: translateY(0) rotate(-2deg); } to { transform: translateY(-10px) rotate(2deg); } }
+    .login { max-width: 460px; margin: 30px auto; text-align: left; }
+    .login input { font-size: 22px; text-align: center; letter-spacing: 1px; }
+    .login .btn { width: 100%; justify-content: center; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap hero">
+    <div class="splat" id="title">Photo Music League</div><br>
+    <div class="sub">Pick the photos. Race the ponies.</div>
+    <div class="horse-box" id="horse"></div>
+
+    <form class="card login tilt-r" id="login">
+      <span class="tab">Riders, check in</span>
+      <label for="phone">Your phone number</label>
+      <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567" required>
+      <div class="hint">The one the league organizer has for you. It's how we know your ballot is yours.</div>
+      <button class="btn" type="submit" id="go">Saddle up →</button>
+    </form>
+    <p><a class="btn purple small" href="results.html">🏇 Results & race</a></p>
+  </div>
+  <script type="module">
+    import { $, apiGet, apiPost, toast } from './common.js';
+    import { horseSVG } from './horse.js';
+    $('#horse').innerHTML = horseSVG({ color: '#ff6a00', mane: '#ff3ea5', cap: '#00c2c7', num: '1' });
+    $('#phone').value = localStorage.getItem('phone') || '';
+    apiGet('results').then((r) => { $('#title').textContent = r.league.title; document.title = r.league.title; }).catch(() => {});
+
+    $('#login').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const phone = $('#phone').value.trim();
+      $('#go').disabled = true;
+      try {
+        const me = await apiPost({ action: 'me', phone });
+        localStorage.setItem('phone', phone);
+        toast(`Howdy, ${me.voter.name}! 🤠`);
+        setTimeout(() => (location.href = 'vote.html'), 500);
+      } catch (err) {
+        toast(err.message, true);
+        $('#go').disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="360" viewBox="0 0 360 360">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 40 q15 -20 30 0 t30 0 t30 0" stroke="#ff3ea5" stroke-width="6"/>
+    <path d="M230 300 q15 -20 30 0 t30 0 t30 0" stroke="#00c2c7" stroke-width="6"/>
+    <path d="M250 70 l20 -20 l20 20 l20 -20" stroke="#111" stroke-width="5"/>
+    <path d="M40 250 l18 -18 l18 18 l18 -18" stroke="#7b4dff" stroke-width="5"/>
+    <circle cx="170" cy="170" r="16" stroke="#111" stroke-width="5"/>
+    <circle cx="320" cy="180" r="10" stroke="#ff6a00" stroke-width="5"/>
+  </g>
+  <polygon points="140,40 165,85 115,85" fill="#ffd400" stroke="#111" stroke-width="4"/>
+  <polygon points="80,140 100,175 60,175" fill="#00c2c7" stroke="#111" stroke-width="4" transform="rotate(-18 80 160)"/>
+  <polygon points="300,240 320,275 280,275" fill="#ff3ea5" stroke="#111" stroke-width="4" transform="rotate(25 300 260)"/>
+  <rect x="170" y="250" width="26" height="26" fill="#9be22d" stroke="#111" stroke-width="4" transform="rotate(20 183 263)"/>
+  <rect x="30" y="320" width="22" height="22" fill="#ff6a00" stroke="#111" stroke-width="4" transform="rotate(-12 41 331)"/>
+  <g fill="#111">
+    <circle cx="220" cy="140" r="3"/><circle cx="234" cy="140" r="3"/><circle cx="248" cy="140" r="3"/>
+    <circle cx="220" cy="154" r="3"/><circle cx="234" cy="154" r="3"/><circle cx="248" cy="154" r="3"/>
+    <circle cx="100" cy="300" r="3"/><circle cx="114" cy="300" r="3"/><circle cx="100" cy="286" r="3"/><circle cx="114" cy="286" r="3"/>
+  </g>
+  <circle cx="300" cy="120" r="7" fill="#ffd400" stroke="#111" stroke-width="3"/>
+  <circle cx="30" cy="110" r="6" fill="#ff3ea5" stroke="#111" stroke-width="3"/>
+</svg>

@@ -1,0 +1,15 @@
+{
+  "name": "photo-league-voter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ranked-choice photo voting for a Music League. Static site (GitHub Pages) + Google Sheet backend.",
+  "type": "module",
+  "scripts": {
+    "photos": "node scripts/build-photos.js",
+    "dev": "node scripts/dev-server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
